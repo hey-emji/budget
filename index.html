@@ -70,6 +70,9 @@ td,th{padding:7px 0;text-align:left;border-top:1px solid var(--line)}
 th{font-weight:600;color:var(--muted);font-size:12px;border-top:none}
 td.n,th.n{text-align:right}
 tr.total td{font-weight:700}
+.total-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:12px;border-top:2px solid var(--ink)}
+.total-row .t{display:grid;font-weight:600}
+.total-row strong{font:800 20px var(--display)}
 .debt{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
 .debt:first-of-type{border-top:none}
 .notice{font-size:13px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn)}
@@ -91,6 +94,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .amount input{border:none;background:none;padding:0;font:800 44px var(--display);letter-spacing:-.03em}
 .amount input:focus-visible{outline:none}
 .amount:focus-within{border-color:var(--accent)}
+.paybtn{background:var(--accent-soft);color:var(--accent);border:none;border-radius:999px;padding:6px 11px;font:600 12px var(--body);cursor:pointer}
 .del{background:var(--bad-soft);border:none;color:var(--bad);width:36px;height:36px;border-radius:10px;display:grid;place-items:center;cursor:pointer}
 .del svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .dialog{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;width:min(340px,calc(100% - 40px));background:var(--surface);border-radius:20px;padding:20px;display:grid;gap:10px;box-shadow:0 20px 50px rgba(0,0,0,.35);animation:pop .18s ease-out}
@@ -146,6 +150,7 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
       <div class="card">
         <div class="row"><h2>Your Expenses This Period</h2><span class="small muted" id="entryCount"></span></div>
         <div id="entries" class="list"></div>
+        <div id="entryTotal" class="total-row" hidden><div class="t"><span>Total spent this period</span><span class="small muted"></span></div><strong></strong></div>
       </div>
 
       <div class="card">
@@ -301,8 +306,13 @@ function render(){
   let totB=0,totS=0; const box=$("cats"); box.textContent="";
   budgets.forEach(b=>{
     const spent=sum(mine.filter(e=>e.cat===b.id),e=>e.amount); totB+=b.amount; totS+=spent;
-    const pct=b.amount?spent/b.amount:(spent>0?2:0), st=pct>1?"bad":pct>.8?"warn":"good";
     const el=document.createElement("div"); el.className="cat";
+    if((config.spend.find(x=>x.id===b.id)||{}).amount===0){
+      el.innerHTML='<div class="row"><strong></strong><span class="pill info">No set budget</span></div><div class="row small muted"><span></span><span>logged as needed</span></div>';
+      el.querySelector("strong").textContent=b.name; el.querySelector(".row.small span").textContent=peso(spent)+" spent";
+      box.appendChild(el); return;
+    }
+    const pct=b.amount?spent/b.amount:(spent>0?2:0), st=pct>1?"bad":pct>.8?"warn":"good";
     el.innerHTML=`<div class="row"><strong></strong><span class="small"><span class="pill ${st}"></span></span></div><div class="bar ${st}"><span style="width:${Math.min(100,pct*100).toFixed(1)}%"></span></div><div class="row small muted"><span></span><span></span></div>`;
     el.querySelector("strong").textContent=b.name;
     el.querySelector(".pill").textContent=pct>1?peso(spent-b.amount)+" over":peso(b.amount-spent)+" left";
@@ -334,11 +344,13 @@ function render(){
     r.lastChild.textContent=peso2(g.amt-credit);
     due.appendChild(r);
   });
-  (config.bills||[]).filter(b=>b.dueDay).forEach(b=>{
-    const due=now.getDate()<=b.dueDay?new Date(now.getFullYear(),now.getMonth(),b.dueDay):new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
+  (config.bills||[]).forEach((b,bi)=>{ if(!b.dueDay) return;
+    let due=new Date(now.getFullYear(),now.getMonth(),b.dueDay);
+    if(b.paidMonth&&b.paidMonth>=mkey(due)) due=new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
     const r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><strong></strong><span class="small muted">Bill</span></div><span class="pill info"></span><strong></strong>';
-    r.querySelector("strong").textContent=b.name; r.querySelector(".pill").textContent=dName(due); r.lastChild.textContent=peso2(b.amount);
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
+    r.querySelector("strong").textContent=b.name; r.querySelector(".t .small").textContent="Bill · due "+dName(due); r.lastChild.textContent=peso2(b.amount);
+    r.querySelector(".paybtn").onclick=()=>openSheet({amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(due)});
     due.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first.push(r):due_list_rest.push(r);
   });
   due_list_first.forEach(r=>due.insertBefore(r,due.firstChild)); due_list_rest.forEach(r=>due.appendChild(r));
@@ -354,7 +366,11 @@ function render(){
   // entries
   const list=$("entries"); list.textContent="";
   const sorted=[...mine].sort((a,b)=>(b.date+(b.ts||"")).localeCompare(a.date+(a.ts||"")));
-  $("entryCount").textContent=sorted.length?sorted.length+" items":"";
+  $("entryCount").textContent=sorted.length?sorted.length+(sorted.length===1?" item":" items"):"";
+  const tot=$("entryTotal"), allSpent=sum(sorted,e=>e.amount), fromSet=sum(sorted.filter(e=>e.cat==="utilities"||e.cat==="credit"),e=>e.amount);
+  tot.hidden=!sorted.length;
+  tot.querySelector("strong").textContent=peso2(allSpent);
+  tot.querySelector(".small").textContent=fromSet?`${peso2(allSpent-fromSet)} spending · ${peso2(fromSet)} bills & card payments`:"All from your spending budget";
   if(!sorted.length){list.innerHTML='<div class="small muted">Nothing logged yet. Tap + to log a purchase.</div>'}
   const catName=id=>(CATS().find(c=>c.id===id)||{name:id}).name;
   sorted.forEach(e=>{
@@ -447,7 +463,10 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   const btn=$("addBtn");btn.disabled=true;
   const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:$("dt").value,cat:selCat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80),ts:new Date().toISOString()};
   expenses=[...expenses,exp]; render(); closeSheet();
-  try{await call("add",{expense:exp});$("amt").value="";$("note").value="";toast("Logged "+peso2(v));}
+  const bc=billCtx; billCtx=null;
+  try{await call("add",{expense:exp});
+    if(bc){const bills=config.bills.map((x,i)=>i===bc.bill?{...x,paidMonth:bc.month}:x);await call("setConfig",{patch:{bills}});}
+    $("amt").value="";$("note").value="";toast("Logged "+peso2(v));}
   catch(e){expenses=expenses.filter(x=>x.id!==exp.id);render();toast("Couldn't save. Check your connection.")}
   btn.disabled=false;
 };
@@ -457,9 +476,11 @@ document.querySelectorAll("nav .tab").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.v); window.scrollTo(0,0);
 });
 $("dt").value=ymd(new Date());
-function openSheet(){$("dt").value=ymd(new Date());$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
-function closeSheet(){$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
-$("fab").onclick=openSheet; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
+let billCtx=null;
+function openSheet(pre){billCtx=pre&&pre.bill!=null?pre:null;$("dt").value=ymd(new Date());
+  if(pre&&pre.amount){$("amt").value=pre.amount;$("note").value=pre.note||"";selCat=pre.cat;document.querySelectorAll("#catChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===pre.cat));}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
+function closeSheet(){if(billCtx){billCtx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
+$("fab").onclick=()=>openSheet(); $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
 function confirmBox(title,text){return new Promise(res=>{
