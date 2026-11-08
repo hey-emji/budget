@@ -403,9 +403,9 @@ function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate()
   return {start,end};}
 const INC=[{id:"inc-side",name:"Side income"},{id:"inc-refund",name:"Refund"},{id:"inc-gift",name:"Gift"},{id:"inc-bonus",name:"Bonus / 13th month"},{id:"inc-other",name:"Other income"}];
 const isInc=e=>String(e.cat).startsWith("inc-");
-const PAYW=[{id:"cash",name:"Cash / debit"},{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"},{id:"maya",name:"Maya CC"},{id:"maribankcc",name:"Maribank CC"},{id:"metrobank",name:"Metrobank CC"},{id:"unionbankcc",name:"Unionbank CC"}];
+const PAYW=[{id:"maribank",name:"Maribank"},{id:"cash",name:"Cash"},{id:"unionbank",name:"Unionbank"},{id:"maya",name:"Maya CC"},{id:"maribankcc",name:"Maribank CC"},{id:"metrobank",name:"Metrobank CC"},{id:"unionbankcc",name:"Unionbank CC"}];
 const GOES=[{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"},{id:"cash",name:"Cash / wallet"}];
-const XFROM=[{id:"cash",name:"Pay / cash"},{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"}];
+const XFROM=[{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"},{id:"cash",name:"Cash"}];
 const XTO=()=>[{id:"to-maribank",name:"Maribank savings"},{id:"to-unionbank",name:"Unionbank savings"},...(config&&config.cards||[]).map(c=>({id:"to-"+c.id,name:c.short||c.name}))];
 const acctName=id=>([...PAYW,...GOES,...XFROM].find(a=>a.id===id)||{name:id}).name;
 const isXfer=e=>e.cat==="transfer";
@@ -416,7 +416,9 @@ function balances(){
   (config.accounts||[]).forEach(a=>{const ok=e=>String(e.date)>=a.startDate&&(e.ts||"")>=(a.startTs||"");
     const inn=sum(expenses.filter(e=>ok(e)&&((isInc(e)&&(e.acct||"maribank")===a.id)||(e.ref===a.id&&(isXfer(e))))),e=>e.amount);
     const outA=sum(expenses.filter(e=>ok(e)&&!isInc(e)&&e.acct===a.id),e=>e.amount);
-    out[a.id]={...a,bal:a.start+inn-outA,inn,outA};});
+    let sal=0; if((config.salaryTo||"maribank")===a.id){ let d=new Date(a.startDate+"T00:00"), y=d.getFullYear(), mo=d.getMonth();
+      const today=ymd(new Date()); for(let i=0;i<48;i++){ for(const h of [1,2]){const pd=payDate(y,mo,h), k=ymd(pd); if(k>a.startDate&&k<=today) sal+=paydays[k]?.income ?? config.incomePerPayday;} mo++; if(mo>11){mo=0;y++} if(ymd(new Date(y,mo,1))>today) break; } }
+    out[a.id]={...a,bal:a.start+inn+sal-outA,inn:inn+sal,sal,outA};});
   (config.cards||[]).filter(c=>c.start!=null).forEach(c=>{const ok=e=>String(e.date)>=c.startDate;
     const buys=sum(expenses.filter(e=>ok(e)&&!isInc(e)&&e.cat!=="credit"&&e.cat!=="transfer"&&e.acct===c.id),e=>e.amount);
     const paid=sum(expenses.filter(e=>ok(e)&&e.cat==="credit"&&e.ref===c.id),e=>e.amount);
@@ -470,7 +472,7 @@ function render(){
   // chips
   if(!$("catChips").dataset.built){$("catChips").dataset.built=1; setMode("exp");}
   // month spend
-  const allMine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE), mine=allMine.filter(e=>!isInc(e)&&!isXfer(e)), incMine=allMine.filter(isInc);
+  const allMine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE), mine=allMine.filter(e=>!isInc(e)&&!isXfer(e)&&!(e.cat==="credit"&&e.ref)), incMine=allMine.filter(isInc);
   renderMoneyIn(per,incMine);
   const pp=plan(per.start); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
   const budgets=budgetsFor(per.start).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
@@ -499,9 +501,15 @@ function render(){
   if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.start);
     const cb=budgetsFor(cp.start).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
     totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(cp.start).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
-  $("heroLeft").textContent=peso(left);
+  const spendAcc=(config.accounts||[]).filter(a=>a.spendable!==false&&!(a.spendable==null&&a.id==="unionbank"));
+  if(spendAcc.length){const B=balances(), money=sum(spendAcc,a=>B[a.id].bal);
+    $("heroLabel").textContent="Money left to spend"; $("heroLeft").textContent=peso(money);
+    $("heroLeft").dataset.budget=left; window._budgetLeft=left; window._money=money; window._spendNames=spendAcc.map(a=>a.name).join(" + ");}
+  else { $("heroLabel").textContent="Left until payday"; $("heroLeft").textContent=peso(left); window._money=null; }
   const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
-  $("heroSub").textContent=`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
+  $("heroSub").textContent=window._money!=null
+    ?`In ${window._spendNames} · Budget left this period ${peso(left)} · about ${peso(Math.max(0,Math.min(left,window._money))/daysLeft)} a day for ${daysLeft} days`
+    :`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
   const next=upcomingPaydays(1)[0], dd=Math.round((next-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
   $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
 
@@ -520,7 +528,7 @@ function render(){
     r.querySelector("strong").textContent=g.L;
     r.querySelector(".t .small").textContent="Due "+dName(g.date)+" · "+g.items.join(", ")+(g.credit?` · ${peso(g.credit)} credit applied`:"");
     r.lastChild.textContent=peso2(g.amt);
-    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"card",mode:"xfer",to:"to-"+({Unionbank:"unionbankcc",Metrobank:"metrobank"}[g.L]||g.L.toLowerCase()),acct:"cash",amount:Math.round(g.amt*100)/100,note:g.L+" card payment",lender:g.L,month:g.dm});
+    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"card",mode:"xfer",to:"to-"+({Unionbank:"unionbankcc",Metrobank:"metrobank"}[g.L]||g.L.toLowerCase()),acct:"maribank",amount:Math.round(g.amt*100)/100,note:g.L+" card payment",lender:g.L,month:g.dm});
     due.appendChild(r);
   });
   (config.cards||[]).filter(c=>c.statement&&c.statementDue&&c.paidStmt!==c.statementDue).forEach(c=>{
@@ -661,10 +669,21 @@ function renderPaydays(){
 function renderAccounts(){
   const B=balances(), sc=$("savingsCard"), cc=$("ccCard");
   const accs=(config.accounts||[]).map(a=>B[a.id]);
-  sc.innerHTML=`<div class="row"><h2>Savings</h2><span class="pill good">${peso2(sum(accs,a=>a.bal))}</span></div><div class="list" id="accList"></div><div class="small muted">Income you log goes in, transfers and anything paid from these accounts comes out. Tap Adjust if a balance doesn't match your bank app.</div>`;
+  sc.innerHTML=`<div class="row"><h2>Savings & wallet</h2><span class="pill good">${peso2(sum(accs,a=>a.bal))}</span></div><div class="list" id="accList"></div>
+   <div class="plangroup"><div class="row small"><strong>Show in "Money left to spend"</strong></div><div id="accToggles"></div></div>
+   <div class="row small"><span>Salary lands in</span><div class="seg" id="salSeg" style="min-width:200px"></div></div>
+   <div class="small muted">Your salary, income you log and transfers go in. Spending paid from these accounts, transfers out and card payments come out. Tap Adjust if a balance doesn't match your bank app.</div>`;
+  const tg=$("accToggles");
+  (config.accounts||[]).forEach(a=>{const on=a.spendable!==false&&!(a.spendable==null&&a.id==="unionbank");
+    const l=document.createElement("label");l.className="planitem";l.innerHTML='<input type="checkbox"><span class="t"><span></span></span><span></span>';
+    l.querySelector("input").checked=on; l.querySelector(".t span").textContent=a.name;
+    l.querySelector("input").onchange=async e=>{const accounts=config.accounts.map(x=>x.id===a.id?{...x,spendable:e.target.checked}:x);try{await call("setConfig",{patch:{accounts}});toast(e.target.checked?"Now counted in Money left to spend":"Hidden from Money left to spend")}catch(x){toast("Couldn't save. Try again.")}};
+    tg.appendChild(l)});
+  const ss=$("salSeg"); (config.accounts||[]).forEach(a=>{const b=document.createElement("button");b.type="button";b.textContent=a.name.replace(" savings","");b.setAttribute("aria-pressed",(config.salaryTo||"maribank")===a.id);
+    b.onclick=async()=>{try{await call("setConfig",{patch:{salaryTo:a.id}});toast("Salary goes to "+a.name)}catch(x){toast("Couldn't save. Try again.")}};ss.appendChild(b)});
   const al=$("accList");
   accs.forEach(a=>{const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Adjust</button><strong></strong>';
-    r.querySelector("strong").textContent=a.name; r.querySelector(".t .small").textContent=(a.note?a.note+" · ":"")+`+${peso(a.inn)} in · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}`; r.lastChild.textContent=peso2(a.bal);
+    r.querySelector("strong").textContent=a.name; r.querySelector(".t .small").textContent=(a.note?a.note+" · ":"")+`+${peso(a.inn)} in${a.sal?` (incl. ${peso(a.sal)} salary)`:""} · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}`; r.lastChild.textContent=peso2(a.bal);
     r.querySelector(".paybtn").onclick=()=>adjustAccount(a); al.appendChild(r)});
   const cards=(config.cards||[]).filter(c=>c.start!=null).map(c=>B[c.id]);
   cc.innerHTML=`<div class="row"><h2>Credit cards</h2><span class="pill warn">${peso2(sum(cards,c=>c.owed))} owed</span></div><div class="list" id="ccList"></div><div class="small muted">Owed = balance when you started tracking + purchases you log with this card − payments you log. Tap Adjust to match your card app.</div>`;
