@@ -77,7 +77,7 @@ td.n,th.n{text-align:right}
 tr.total td{font-weight:700}
 .total-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:12px;border-top:2px solid var(--ink)}
 .total-row .t{display:grid;font-weight:600}
-.total-row strong{font:800 20px var(--display)}
+.total-row strong{font:800 20px var(--display);white-space:nowrap}
 .debt{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
 .debt:first-of-type{border-top:none}
 .notice{font-size:13px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn)}
@@ -104,6 +104,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
+.pos{color:var(--good)}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
 .seg button{border:none;background:none;color:var(--muted);padding:9px 6px;border-radius:9px;font:600 13px var(--body);cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
@@ -197,6 +198,13 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
       </div>
 
       <div class="card">
+        <div class="row"><h2>Money In</h2><span class="pill good">Maribank</span></div>
+        <div id="moneyIn" class="list"></div>
+        <div id="incTotal" class="total-row"><div class="t"><span>Total in this period</span><span class="small muted"></span></div><strong class="pos"></strong></div>
+        <div class="small muted" id="savedNote"></div>
+      </div>
+
+      <div class="card">
         <div class="row"><h2 id="budTitle">Your Budget This Period</h2><span class="small muted" id="monthName"></span></div>
         <div id="cutNote" class="notice" hidden></div>
         <div id="cats" style="display:grid;gap:12px"></div>
@@ -259,9 +267,11 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
 <form class="sheet" id="addForm" autocomplete="off" hidden aria-label="Log spending">
   <div class="grab"></div>
   <div class="row"><h2 id="sheetTitle">Log spending</h2><button class="ghost" type="button" id="closeSheet">Cancel</button></div>
+  <div class="seg" role="group" aria-label="Entry type"><button type="button" id="mExp" aria-pressed="true">Expense</button><button type="button" id="mInc" aria-pressed="false">Income</button></div>
   <div class="quickrow" id="quick" aria-label="Quick add"></div>
   <label class="amount" for="amt"><span>₱</span><input id="amt" inputmode="decimal" placeholder="0" required></label>
   <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+  <div class="small muted" id="incNote" hidden>Extra income goes to your Maribank savings. It doesn't change your spending budget. Your salary is added automatically from the Paydays tab.</div>
   <div class="inline">
     <div><label class="small muted" for="note">Note</label><input id="note" placeholder="lunch, 1 pack…"></div>
     <div><label class="small muted" for="dt">Date</label><input id="dt" type="date" required></div>
@@ -350,6 +360,34 @@ function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate()
   const sy=start.getFullYear(),sm=start.getMonth(); let end;
   if(start.getDate()===15) end=payDate(sy,sm,2); else end=sm===11?payDate(sy+1,0,1):payDate(sy,sm+1,1);
   return {start,end};}
+const INC=[{id:"inc-side",name:"Side income"},{id:"inc-refund",name:"Refund"},{id:"inc-gift",name:"Gift"},{id:"inc-bonus",name:"Bonus / 13th month"},{id:"inc-other",name:"Other income"}];
+const isInc=e=>String(e.cat).startsWith("inc-");
+let sheetMode="exp";
+function setMode(mode,keepCat){sheetMode=mode; const chips=$("catChips"); chips.textContent="";
+  const list=mode==="inc"?INC:CATS();
+  list.forEach(c=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c.name;b.dataset.id=c.id;b.onclick=()=>pickCat(c.id);chips.appendChild(b)});
+  pickCat(keepCat&&list.some(c=>c.id===keepCat)?keepCat:list[0].id);
+  $("mExp").setAttribute("aria-pressed",mode==="exp"); $("mInc").setAttribute("aria-pressed",mode==="inc");
+  $("note").placeholder=mode==="inc"?"e.g. SM refund, freelance":"lunch, 1 pack…";
+  $("incNote").hidden=mode!=="inc"; $("quick").hidden=mode==="inc"||!!ctx;
+  if(!ctx) $("sheetTitle").textContent=mode==="inc"?"Log income":"Log spending";
+}
+function renderMoneyIn(per,incMine){
+  const box=$("moneyIn"); if(!box) return; box.textContent="";
+  const p=plan(per.start), extra=sum(incMine,e=>e.amount);
+  const rows=[{name:"Salary · "+dName(per.start),sub:p.actual?"Pay received":"Expected pay",amt:p.income}];
+  [...incMine].sort((a,b)=>(b.date+b.ts).localeCompare(a.date+a.ts)).forEach(e=>rows.push({e,name:e.note||(INC.find(c=>c.id===e.cat)||{}).name,sub:(INC.find(c=>c.id===e.cat)||{name:"Income"}).name+" · "+dName(new Date(e.date+"T00:00"))+" · to Maribank",amt:e.amount}));
+  rows.forEach(r=>{const el=document.createElement("div");el.className="item";
+    el.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong class="pos"></strong>'+(r.e?'<button class="del" type="button" aria-label="Delete income"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>':'<span></span>');
+    el.querySelector(".t span").textContent=r.name; el.querySelector(".t .small").textContent=r.sub; el.querySelector("strong").textContent="+"+peso2(r.amt);
+    if(r.e){const tt=el.querySelector(".t");tt.classList.add("tap");tt.onclick=()=>openSheet({kind:"edit",entry:r.e,amount:r.e.amount,cat:r.e.cat,note:r.e.note,date:r.e.date});
+      el.querySelector(".del").onclick=async()=>{if(!await confirmBox(`Delete +${peso2(r.e.amount)}${r.e.note?" · "+r.e.note:""}?`,"This removes it from your income and your Google Sheet."))return;try{await call("delete",{id:r.e.id});toast("Deleted")}catch(x){toast("Couldn't delete. Try again.")}};}
+    box.appendChild(el)});
+  const t=$("incTotal"); t.querySelector("strong").textContent="+"+peso2(p.income+extra);
+  t.querySelector(".small").textContent=extra?`${peso2(extra)} extra went to Maribank savings`:"Log refunds, gifts or side income with + → Income";
+  const mk=mkey(now), monthExtra=sum(expenses.filter(e=>isInc(e)&&String(e.date).startsWith(mk)),e=>e.amount), allExtra=sum(expenses.filter(isInc),e=>e.amount);
+  $("savedNote").textContent=`Extra income to Maribank: ${peso2(monthExtra)} this month · ${peso2(allExtra)} since you started tracking`;
+}
 const CATS=()=>[...budgetsFor(now).map(b=>({id:b.id,name:b.name})),{id:"utilities",name:"Bills & Utilities"},{id:"credit",name:"Credit Card & Loans"},{id:"other",name:"Other"}];
 
 /* ---------- render ---------- */
@@ -363,11 +401,10 @@ function render(){
   $("monthName").textContent=plabel; $("perLabel").textContent=pOff===0?"This period · "+plabel:plabel; $("perNext").disabled=pOff===0;
   $("expTitle").textContent=pOff===0?"Your Expenses This Period":"Your Expenses"; $("budTitle").textContent=pOff===0?"Your Budget This Period":"Your Budget";
   // chips
-  const chips=$("catChips"); if(!chips.dataset.built){chips.dataset.built=1;
-    CATS().forEach((c,i)=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c.name;b.dataset.id=c.id;b.setAttribute("aria-pressed",i===0);b.onclick=()=>{selCat=c.id;chips.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b))};chips.appendChild(b)});
-    selCat=CATS()[0].id;}
+  if(!$("catChips").dataset.built){$("catChips").dataset.built=1; setMode("exp");}
   // month spend
-  const mine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE);
+  const allMine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE), mine=allMine.filter(e=>!isInc(e)), incMine=allMine.filter(isInc);
+  renderMoneyIn(per,incMine);
   const pp=plan(per.start); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
   const budgets=budgetsFor(per.start).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
   const cn=$("cutNote"); if(pp.cuts.length){cn.hidden=false;cn.textContent=`${[pp.income<config.incomePerPayday?`Pay on ${dName(per.start)} was ${peso(config.incomePerPayday-pp.income)} lower`:"",pp.cu.total?`${peso(pp.cu.total)} went to catch-up set-asides from ${dName(pp.cu.from)}`:""].filter(Boolean).join(" and ")}, so this period's budget was trimmed: `+pp.cuts.map(c=>`${c.name} −${peso(c.amount)}`).join(", ")+(pp.uncovered>0?`. Still short ${peso(pp.uncovered)}: cover it from cash on hand.`:".");} else cn.hidden=true;
@@ -447,7 +484,7 @@ function render(){
   tot.querySelector("strong").textContent=peso2(allSpent);
   tot.querySelector(".small").textContent=fromSet?`${peso2(allSpent-fromSet)} spending · ${peso2(fromSet)} bills & card payments`:"All from your spending budget";
   if(!sorted.length){list.innerHTML='<div class="small muted">Nothing logged yet. Tap + to log a purchase.</div>'}
-  const catName=id=>(CATS().find(c=>c.id===id)||{name:id}).name;
+  const catName=id=>([...CATS(),...INC].find(c=>c.id===id)||{name:id}).name;
   sorted.forEach(e=>{
     const r=document.createElement("div");r.className="item";
     r.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong></strong><button class="del" type="button" aria-label="Delete entry"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>';
@@ -652,19 +689,21 @@ $("dt").value=ymd(new Date());
 let ctx=null;
 function pickCat(id){selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===id))}
 function buildQuick(){const q=$("quick");q.textContent="";
-  const counts={};expenses.filter(e=>e.note&&!/estimated/i.test(e.note)&&e.cat!=="utilities"&&e.cat!=="credit").forEach(e=>{const k=e.cat+"|"+e.note.toLowerCase();const c=counts[k]||(counts[k]={note:e.note,cat:e.cat,n:0,amount:e.amount,ts:""});c.n++;if((e.date+e.ts)>c.ts){c.ts=e.date+e.ts;c.amount=e.amount}});
+  const counts={};expenses.filter(e=>e.note&&!/estimated/i.test(e.note)&&e.cat!=="utilities"&&e.cat!=="credit"&&!isInc(e)).forEach(e=>{const k=e.cat+"|"+e.note.toLowerCase();const c=counts[k]||(counts[k]={note:e.note,cat:e.cat,n:0,amount:e.amount,ts:""});c.n++;if((e.date+e.ts)>c.ts){c.ts=e.date+e.ts;c.amount=e.amount}});
   const learned=Object.values(counts).filter(c=>c.n>=2).sort((a,b)=>b.n-a.n).slice(0,4);
   const defs=[{note:"Grab",cat:"transport"},{note:"Cigarettes",cat:"personal"},{note:"Lunch",cat:"foodout"},{note:"Drinking water",cat:"household"}];
   const list=[...learned,...defs.filter(d=>!learned.some(l=>l.note.toLowerCase()===d.note.toLowerCase()))].slice(0,6);
   list.forEach(x=>{const b=document.createElement("button");b.type="button";b.className="quick";b.textContent=x.amount?`${x.note} · ${peso(x.amount)}`:x.note;
     b.onclick=()=>{$("note").value=x.note;pickCat(x.cat);if(x.amount)$("amt").value=x.amount;$("amt").focus()};q.appendChild(b)});}
 function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(new Date());
-  $("sheetTitle").textContent=pre&&pre.kind==="edit"?"Edit expense":pre&&pre.kind==="carry"?"Log carryover payment":"Log spending";
+  $("sheetTitle").textContent=pre&&pre.kind==="edit"?(String(pre.cat).startsWith("inc-")?"Edit income":"Edit expense"):pre&&pre.kind==="carry"?"Log carryover payment":"Log spending";
   $("addBtn").textContent=pre&&pre.kind==="edit"?"Save changes":"Save";
   $("quick").hidden=!!pre; if(!pre) buildQuick();
-  if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";pickCat(pre.cat);}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
+  setMode(pre&&pre.cat&&String(pre.cat).startsWith("inc-")?"inc":"exp",pre&&pre.cat);
+  if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
+$("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")};
 $("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
