@@ -91,10 +91,26 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .amount input{border:none;background:none;padding:0;font:800 44px var(--display);letter-spacing:-.03em}
 .amount input:focus-visible{outline:none}
 .amount:focus-within{border-color:var(--accent)}
+.del{background:var(--bad-soft);border:none;color:var(--bad);width:36px;height:36px;border-radius:10px;display:grid;place-items:center;cursor:pointer}
+.del svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.dialog{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;width:min(340px,calc(100% - 40px));background:var(--surface);border-radius:20px;padding:20px;display:grid;gap:10px;box-shadow:0 20px 50px rgba(0,0,0,.35);animation:pop .18s ease-out}
+.dialog p{margin:0}
+#dlgBack{z-index:29}
+button.secondary{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:13px;font:600 15px var(--body);cursor:pointer}
+button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;padding:13px;font:600 15px var(--body);cursor:pointer}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-46%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%)}}
+.skel{display:grid;gap:14px}
+.sk{height:12px;border-radius:8px;background:linear-gradient(90deg,var(--line) 0%,var(--bg) 50%,var(--line) 100%);background-size:200% 100%;animation:shim 1.2s linear infinite}
+.hero .sk{background:linear-gradient(90deg,rgba(128,128,128,.25),rgba(128,128,128,.12),rgba(128,128,128,.25));background-size:200% 100%}
+.sk.big{height:40px;border-radius:12px} .w30{width:30%} .w40{width:40%} .w50{width:50%} .w60{width:60%} .w70{width:70%} .w80{width:80%}
+@keyframes shim{from{background-position:200% 0}to{background-position:-200% 0}}
+.reveal>.card{animation:rise .5s cubic-bezier(.2,.8,.2,1) both}
+.reveal>.card:nth-child(2){animation-delay:.07s} .reveal>.card:nth-child(3){animation-delay:.14s} .reveal>.card:nth-child(4){animation-delay:.21s} .reveal>.card:nth-child(5){animation-delay:.28s}
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes up{from{transform:translateY(100%)}to{transform:none}}
 .toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
-@media (prefers-reduced-motion:reduce){.toast{transition:none}.sheet{animation:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.sheet,.dialog,.reveal>.card{animation:none}.sk{animation:none}}
 </style>
 </head>
 <body>
@@ -114,7 +130,12 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 
   <!-- TODAY -->
   <section class="view" id="v-today">
-    <div style="display:grid;gap:14px">
+    <div class="skel" id="skel" aria-hidden="true">
+      <div class="card hero"><div class="sk w30"></div><div class="sk big w60"></div><div class="sk w80"></div></div>
+      <div class="card"><div class="sk w40"></div><div class="sk"></div><div class="sk w70"></div></div>
+      <div class="card"><div class="sk w50"></div><div class="sk"></div><div class="sk"></div><div class="sk w60"></div></div>
+    </div>
+    <div style="display:grid;gap:14px" id="todayContent" hidden>
       <div class="card hero">
         <div class="row"><span class="eyebrow muted" id="heroLabel">Left until payday</span><span class="pill info" id="heroPayday"></span></div>
         <div class="big" id="heroLeft">—</div>
@@ -148,7 +169,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
       <div class="card">
         <h2>Next 12 paydays</h2>
         <div style="overflow-x:auto"><table id="payTable"></table></div>
-        <div class="small muted">Leftover after installments, bills, living money and the cigarette envelope. If a paycheck is short, the app cuts dine-out first, then misc, then cigarettes, then groceries.</div>
+        <div class="small muted">Leftover after installments, bills, living money and the cigarette envelope. If a paycheck is short, the app cuts Dining Out first, then Personal, then Household, then Food & Groceries.</div>
       </div>
     </div>
   </section>
@@ -197,6 +218,12 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
   </div>
   <button class="primary" type="submit" id="addBtn">Save</button>
 </form>
+<div class="backdrop" id="dlgBack" hidden></div>
+<div class="dialog" id="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" hidden>
+  <h2 id="dlgTitle"></h2>
+  <p class="small muted" id="dlgText"></p>
+  <div class="inline"><button class="secondary" type="button" id="dlgNo">Cancel</button><button class="danger" type="button" id="dlgYes">Delete</button></div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -232,10 +259,10 @@ function plan(date){
   const living=(sum(config.spend,s=>s.amount)+sum(config.subs,s=>s.amount))/2;
   const cig=cigCap(m)/2;
   const left=income-inst-bills-living-cig;
-  const half=id=>id==="cigarettes"?cig:(config.spend.find(s=>s.id===id)?.amount||0)/2;
-  const names={foodout:"Dining Out",misc:"Personal & Household",cigarettes:"Tobacco",groceries:"Food"};
+  const half=id=>(config.spend.find(s=>s.id===id)?.amount||0)/2+(id==="personal"?cig:0);
+  const names={foodout:"Dining Out",personal:"Personal",household:"Household",groceries:"Food & Groceries"};
   const cuts=[]; let short=left<0?-left:0;
-  for(const id of ["foodout","misc","cigarettes","groceries"]){ if(short<=0) break; const c=Math.min(half(id),short); if(c>0){cuts.push({id,name:names[id],amount:c}); short-=c;} }
+  for(const id of ["foodout","personal","household","groceries"]){ if(short<=0) break; const c=Math.min(half(id),short); if(c>0){cuts.push({id,name:names[id],amount:c}); short-=c;} }
   return {date,key,m,income,actual:paydays[key]?.income!=null,inst,bills,living,cig,left,cuts,uncovered:short,final:left<0?-short:left};
 }
 function upcomingPaydays(n){
@@ -245,7 +272,7 @@ function upcomingPaydays(n){
   return out;
 }
 function budgetsFor(m){
-  return [...config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount})),{id:"cigarettes",name:"Tobacco",amount:cigCap(m)}];
+  return config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount+(s.id==="personal"?cigCap(m):0)}));
 }
 function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate(),ld=lastDay(y,mo);
   let start; if(d>=Math.min(30,ld)) start=payDate(y,mo,2); else if(d>=15) start=payDate(y,mo,1); else {const py=mo===0?y-1:y,pm=mo===0?11:mo-1;start=payDate(py,pm,2)}
@@ -274,7 +301,7 @@ function render(){
   let totB=0,totS=0; const box=$("cats"); box.textContent="";
   budgets.forEach(b=>{
     const spent=sum(mine.filter(e=>e.cat===b.id),e=>e.amount); totB+=b.amount; totS+=spent;
-    const pct=b.amount?spent/b.amount:0, st=pct>1?"bad":pct>.8?"warn":"good";
+    const pct=b.amount?spent/b.amount:(spent>0?2:0), st=pct>1?"bad":pct>.8?"warn":"good";
     const el=document.createElement("div"); el.className="cat";
     el.innerHTML=`<div class="row"><strong></strong><span class="small"><span class="pill ${st}"></span></span></div><div class="bar ${st}"><span style="width:${Math.min(100,pct*100).toFixed(1)}%"></span></div><div class="row small muted"><span></span><span></span></div>`;
     el.querySelector("strong").textContent=b.name;
@@ -332,11 +359,14 @@ function render(){
   const catName=id=>(CATS().find(c=>c.id===id)||{name:id}).name;
   sorted.forEach(e=>{
     const r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong></strong><button class="ghost" aria-label="Delete entry">Delete</button>';
+    r.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong></strong><button class="del" type="button" aria-label="Delete entry"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>';
     r.querySelector(".t span").textContent=e.note||catName(e.cat);
     r.querySelector(".t .small").textContent=catName(e.cat)+" · "+dName(new Date(e.date+"T00:00"));
     r.querySelector("strong").textContent=peso2(e.amount);
-    r.querySelector("button").onclick=async()=>{try{await call("delete",{id:e.id});toast("Deleted")}catch(err){toast("Couldn't delete. Try again.")}};
+    r.querySelector("button").onclick=async()=>{
+      const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget and your Google Sheet.");
+      if(!ok) return;
+      try{await call("delete",{id:e.id});toast("Deleted")}catch(err){toast("Couldn't delete. Try again.")}};
     list.appendChild(r);
   });
 
@@ -352,7 +382,7 @@ function renderPaydays(){
    <tr><td>Installments (half of month)</td><td class="n">−${peso2(p.inst)}</td></tr>
    <tr><td>Bills (utilities, HOA, wifi)</td><td class="n">−${peso2(p.bills)}</td></tr>
    <tr><td>Living money + subscriptions</td><td class="n">−${peso2(p.living)}</td></tr>
-   <tr><td>Cigarette envelope</td><td class="n">−${peso2(p.cig)}</td></tr>
+   <tr><td>Vices (part of Personal)</td><td class="n">−${peso2(p.cig)}</td></tr>
    ${p.cuts.map(c=>`<tr><td>Cut: ${c.name}</td><td class="n">+${peso2(c.amount)}</td></tr>`).join("")}
    <tr class="total"><td>${p.final<0?"Still short":"Left over"}</td><td class="n">${peso2(p.final)}</td></tr>
    ${p.uncovered>0?`<tr><td colspan="2" class="small muted">Use cash on hand or the Unionbank buffer for the shortfall. Installments and bills stay fully covered first.</td></tr>`:""}
@@ -398,7 +428,7 @@ function renderSettings(){
   const add=(id,label,val)=>{const w=document.createElement("div");w.innerHTML=`<label class="small muted" for="${id}"></label><input id="${id}" inputmode="decimal">`;w.querySelector("label").textContent=label;w.querySelector("input").value=val;f.appendChild(w)};
   add("s-income","Pay per payday (₱)",config.incomePerPayday);
   config.spend.forEach(s=>add("s-"+s.id,s.name+" per month (₱)",s.amount));
-  const m=mkey(now); add("s-cig","Cigarettes cap for "+mName(m,true)+" (₱)",cigCap(m));
+  const m=mkey(now); add("s-cig","Vices cap for "+mName(m,true)+", part of Personal (₱)",cigCap(m));
 }
 $("setForm").onsubmit=async ev=>{ev.preventDefault();
   const num=id=>{const v=parseFloat(String($(id).value).replace(/,/g,""));return v>=0?v:null};
@@ -432,6 +462,12 @@ function closeSheet(){$("backdrop").hidden=true;$("addForm").hidden=true;$("amt"
 $("fab").onclick=openSheet; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
+function confirmBox(title,text){return new Promise(res=>{
+  $("dlgTitle").textContent=title;$("dlgText").textContent=text;$("dlg").hidden=false;$("dlgBack").hidden=false;$("dlgNo").focus();
+  const done=v=>{$("dlg").hidden=true;$("dlgBack").hidden=true;$("dlgYes").onclick=$("dlgNo").onclick=$("dlgBack").onclick=null;res(v)};
+  $("dlgYes").onclick=()=>done(true);$("dlgNo").onclick=()=>done(false);$("dlgBack").onclick=()=>done(false);
+})}
+let revealed=false;
 /* ---------- data ---------- */
 let API=null, PASS=null;
 try{API=localStorage.getItem("budget.api");PASS=localStorage.getItem("budget.pass")}catch(e){}
@@ -440,14 +476,15 @@ function apply(j){
   if(!j||j.error) throw new Error(j&&j.error||"bad_response");
   config=j.config; expenses=j.expenses||[]; paydays=j.paydays||{};
   $("syncPill").textContent="Synced"; setNotice(""); $("setupForm").hidden=true; render();
+  if(!revealed){revealed=true;$("skel").hidden=true;const t=$("todayContent");t.hidden=false;t.classList.add("reveal");}
 }
 async function load(){
-  if(!API||!PASS){$("setupForm").hidden=false;$("syncPill").textContent="Not connected";return}
+  if(!API||!PASS){$("skel").hidden=true;$("setupForm").hidden=false;$("syncPill").textContent="Not connected";return}
   const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),15000);
   try{const r=await fetch(API+"?pass="+encodeURIComponent(PASS),{signal:ctl.signal});apply(await r.json())}
   catch(e){
     if(String(e.message)==="wrong_passcode"){$("setupForm").hidden=false;setNotice("That passcode didn't match the one in your script.");$("syncPill").textContent="Not connected";}
-    else{$("syncPill").textContent="Offline";setNotice(config?"Couldn't refresh. Showing what was loaded before.":"Can't reach your budget sheet. Check your connection and reopen the app.")}
+    else{$("skel").hidden=!!config||false;if(!config){$("skel").hidden=true}$("syncPill").textContent="Offline";setNotice(config?"Couldn't refresh. Showing what was loaded before.":"Can't reach your budget sheet. Check your connection and reopen the app.")}
   } finally{clearTimeout(t)}
 }
 async function call(action,data){
