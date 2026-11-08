@@ -123,20 +123,21 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 
 
       <div class="card">
-        <div class="row"><h2>This pay period</h2><span class="small muted" id="monthName"></span></div>
+        <div class="row"><h2>Your Expenses This Period</h2><span class="small muted" id="entryCount"></span></div>
+        <div id="entries" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><h2>Your Budget This Period</h2><span class="small muted" id="monthName"></span></div>
         <div id="cutNote" class="notice" hidden></div>
         <div id="cats" style="display:grid;gap:12px"></div>
       </div>
 
       <div class="card">
-        <h2>Coming up</h2>
+        <h2>Upcoming Payments</h2>
         <div id="dueList" class="list"></div>
       </div>
 
-      <div class="card">
-        <div class="row"><h2>Entries this pay period</h2><span class="small muted" id="entryCount"></span></div>
-        <div id="entries" class="list"></div>
-      </div>
     </div>
   </section>
 
