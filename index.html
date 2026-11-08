@@ -634,6 +634,7 @@ function renderPaydays(){
   <div class="row"><h2>Payday plan</h2><span class="pill ${p.final<0?"bad":p.cuts.length?"warn":"good"}">${p.final<0?peso(-p.final)+" short":peso(p.final)+" to save"}</span></div>
   <div class="row"><span>Pay ${p.actual?(p.date>new Date()?'<span class="small muted">(your estimate)</span>':"received"):'<span class="small muted">(expected)</span>'}</span><strong class="bigish">${peso2(p.income)}</strong></div>
   <form id="payForm" class="inline" style="align-items:end"><div><label class="small muted" for="payAmt">Actual or expected pay for ${dName(p.date)}</label><input id="payAmt" inputmode="decimal" placeholder="${p.income}"></div><button class="primary" type="submit">Update pay</button></form>
+  ${(config.salaryTo||"maribank")!=="maribank"&&(config.accounts||[]).some(a=>a.id==="maribank")?`<button class="secondary" type="button" id="movePay">Move pay from ${acctName(config.salaryTo)} to Maribank</button>`:""}
   <div class="row small muted"><span>Set aside so far</span><span>${peso(done)} of ${peso(total)}</span></div>
   <div class="bar"><span style="width:${total?Math.min(100,done/total*100).toFixed(1):0}%"></span></div>
   <div id="planGroups"></div>
@@ -655,6 +656,7 @@ function renderPaydays(){
       r.querySelector("input").onchange=e=>{const ch=getChecks(p.key);if(e.target.checked)ch[i.k]=true;else delete ch[i.k];setChecks(p.key,ch);renderPaydays()};
       sec.appendChild(r)});
     pg.appendChild(sec)});
+  const mp=$("movePay"); if(mp) mp.onclick=()=>openSheet({mode:"xfer",to:"to-maribank",acct:config.salaryTo,amount:p.income,note:"Salary "+dName(p.date)+" to Maribank",date:p.date<=new Date()?ymd(p.date):ymd(new Date())});
   $("pdPrev").onclick=()=>{if(pdIdx>0){pdIdx--;renderPaydays()}}; $("pdNext").onclick=()=>{pdIdx++;renderPaydays()};
   $("payForm").onsubmit=async ev=>{ev.preventDefault();const v=parseFloat($("payAmt").value.replace(/,/g,""));if(!(v>0)){toast("Enter the amount you received");return}
     try{await call("setPay",{date:p.key,income:v});toast("Pay updated. Plan adjusted.")}catch(e){toast("Couldn't save. Try again.")}};
