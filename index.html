@@ -440,8 +440,14 @@ function render(){
 }
 
 let pdIdx=0;
-function getChecks(k){try{return JSON.parse(localStorage.getItem("bujjet.set."+k)||"{}")}catch(e){return {}}}
-function setChecks(k,v){try{localStorage.setItem("bujjet.set."+k,JSON.stringify(v))}catch(e){}}
+function getChecks(k){return {...((config.setAside||{})[k]||{})}}
+let checkTimer=null;
+function setChecks(k,v){
+  const all={...(config.setAside||{}),[k]:v};
+  const keep=Object.keys(all).sort().slice(-6); const pruned={}; keep.forEach(x=>pruned[x]=all[x]);
+  config.setAside=pruned; clearTimeout(checkTimer);
+  checkTimer=setTimeout(async()=>{try{await call("setConfig",{patch:{setAside:config.setAside}})}catch(e){toast("Couldn't sync your checklist. It'll retry next time.")}},700);
+}
 function renderPaydays(){
   const pds=upcomingPaydays(12); if(pdIdx>=pds.length) pdIdx=0;
   const p=plan(pds[pdIdx]), m=p.m, sp=spendFor(p.date), cutOf=id=>sum(p.cuts.filter(c=>c.id===id),c=>c.amount);
