@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2f4ad0">
+<meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -11,72 +12,89 @@
 <title>Budget</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  /* Layout: one phone-width column; summary first, detail below; bottom tab bar */
-  --bg:#eef1f6; --surface:#ffffff; --ink:#14192b; --muted:#5d6579; --line:#d9dee8;
-  --accent:#2f4ad0; --accent-soft:#e3e8fb;
-  --good:#1d7a4c; --good-soft:#dff2e7; --warn:#a15c00; --warn-soft:#fbefd9; --bad:#b42318; --bad-soft:#fbe4e1;
-  --display:"Archivo",system-ui,sans-serif; --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  /* Layout: one phone column, summary card first, bottom tab bar with a raised log button */
+  --bg:#f4f2ee; --surface:#ffffff; --ink:#151515; --muted:#6f6a62; --line:#e6e2da;
+  --accent:#ff4d1c; --accent-soft:#ffe7dd; --hero:#151515; --hero-ink:#f4f2ee; --hero-muted:#a39e95;
+  --good:#23824e; --good-soft:#e1f2e7; --warn:#b26b00; --warn-soft:#fbefd7; --bad:#d4252b; --bad-soft:#fde3e3;
+  --display:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif; --body:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0e1220; --surface:#171c2e; --ink:#e9ecf5; --muted:#9aa2b8; --line:#2a3148;
-  --accent:#8ea0ff; --accent-soft:#232c55;
-  --good:#5fd39a; --good-soft:#163829; --warn:#f2b55c; --warn-soft:#3a2c14; --bad:#ff8a7d; --bad-soft:#3d1c1a; color-scheme:dark;}}
+  --bg:#0e0e0e; --surface:#181818; --ink:#f2efe9; --muted:#9a958c; --line:#2a2928;
+  --accent:#ff5a2a; --accent-soft:#3b1b10; --hero:#f2efe9; --hero-ink:#121212; --hero-muted:#6b665e;
+  --good:#5fcf8e; --good-soft:#15301f; --warn:#f0b04d; --warn-soft:#352711; --bad:#ff6b6b; --bad-soft:#3a1616; color-scheme:dark;}}
 :root[data-theme="dark"]{
-  --bg:#0e1220; --surface:#171c2e; --ink:#e9ecf5; --muted:#9aa2b8; --line:#2a3148;
-  --accent:#8ea0ff; --accent-soft:#232c55;
-  --good:#5fd39a; --good-soft:#163829; --warn:#f2b55c; --warn-soft:#3a2c14; --bad:#ff8a7d; --bad-soft:#3d1c1a; color-scheme:dark;}
+  --bg:#0e0e0e; --surface:#181818; --ink:#f2efe9; --muted:#9a958c; --line:#2a2928;
+  --accent:#ff5a2a; --accent-soft:#3b1b10; --hero:#f2efe9; --hero-ink:#121212; --hero-muted:#6b665e;
+  --good:#5fcf8e; --good-soft:#15301f; --warn:#f0b04d; --warn-soft:#352711; --bad:#ff6b6b; --bad-soft:#3a1616; color-scheme:dark;}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-variant-numeric:tabular-nums}
-main{max-width:520px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px 96px;display:grid;gap:14px}
-h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
-h1{font-size:22px;font-weight:800}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
+main{max-width:520px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom));display:grid;gap:14px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.02em}
+h1{font-size:26px;font-weight:800}
 h2{font-size:16px;font-weight:700}
-.muted{color:var(--muted)}
-.small{font-size:13px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px}
+.muted{color:var(--muted)} .small{font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px;display:grid;gap:12px}
 .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.big{font-family:var(--display);font-size:34px;font-weight:800;line-height:1.05}
-.hero{background:var(--accent);color:#fff;border:none}
-.hero .muted{color:rgba(255,255,255,.78)}
-.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.big{font-family:var(--display);font-size:44px;font-weight:800;line-height:1;letter-spacing:-.03em}
+.hero{background:var(--hero);color:var(--hero-ink);border:none;padding:20px}
+.hero .muted{color:var(--hero-muted)}
+.eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px}
 .pill.good{background:var(--good-soft);color:var(--good)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.info{background:var(--accent-soft);color:var(--accent)}
-.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
-.bar>span{display:block;height:100%;border-radius:99px;background:var(--accent)}
-.bar.good>span{background:var(--good)} .bar.warn>span{background:var(--warn)} .bar.bad>span{background:var(--bad)}
-.cat{display:grid;gap:5px}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:6px 10px;border-radius:999px;font:500 13px var(--body);cursor:pointer}
-.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-input,select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
-.inline{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-button.primary{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 14px;font:600 15px var(--body);cursor:pointer}
+.hero .pill.info{background:var(--accent);color:#fff}
+.bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar>span{display:block;height:100%;border-radius:99px;background:var(--ink)}
+.bar.good>span{background:var(--ink)} .bar.warn>span{background:var(--warn)} .bar.bad>span{background:var(--bad)}
+.cat{display:grid;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 13px;border-radius:999px;font:500 14px var(--body);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+input,select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%}
+.inline{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button.primary{background:var(--accent);color:#fff;border:none;border-radius:14px;padding:14px 16px;font:600 16px var(--body);cursor:pointer}
 button.ghost{background:none;border:none;color:var(--muted);font:500 13px var(--body);cursor:pointer;padding:4px 6px}
-button:focus-visible,input:focus-visible,.chip:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus-visible,input:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .list{display:grid}
-.item{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.item{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .item:first-child{border-top:none}
 .item .t{display:grid}
 table{width:100%;border-collapse:collapse;font-size:14px}
-td,th{padding:6px 0;text-align:left;border-top:1px solid var(--line)}
+td,th{padding:7px 0;text-align:left;border-top:1px solid var(--line)}
 th{font-weight:600;color:var(--muted);font-size:12px;border-top:none}
 td.n,th.n{text-align:right}
 tr.total td{font-weight:700}
-.debt{display:grid;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.debt{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
 .debt:first-of-type{border-top:none}
-nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
-nav .in{display:grid;grid-template-columns:repeat(4,1fr);max-width:520px;width:100%}
-nav button{background:none;border:none;padding:12px 4px;font:600 13px var(--body);color:var(--muted);cursor:pointer}
-nav button[aria-current="page"]{color:var(--accent);box-shadow:inset 0 3px 0 var(--accent)}
-.view[hidden]{display:none}
-.notice{font-size:13px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn)}
-.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.notice{font-size:13px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn)}
+/* bottom bar */
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav .in{display:grid;grid-template-columns:1fr 1fr 76px 1fr 1fr;max-width:520px;margin:0 auto;align-items:end}
+nav .tab{background:none;border:none;padding:10px 2px 12px;font:600 11px var(--body);color:var(--muted);cursor:pointer;display:grid;justify-items:center;gap:4px}
+nav .tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav .tab[aria-current="page"]{color:var(--ink)}
+nav .tab[aria-current="page"] svg{stroke:var(--accent)}
+.fab{justify-self:center;width:60px;height:60px;border-radius:50%;border:none;background:var(--accent);color:#fff;margin-bottom:14px;transform:translateY(-14px);box-shadow:0 8px 20px rgba(255,77,28,.35);cursor:pointer;display:grid;place-items:center}
+.fab svg{width:28px;height:28px;stroke:#fff;stroke-width:2.4;stroke-linecap:round}
+/* log sheet */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:11;background:var(--surface);border-radius:24px 24px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto;display:grid;gap:14px;animation:up .22s ease-out}
+.sheet .grab{width:40px;height:5px;border-radius:9px;background:var(--line);justify-self:center}
+.amount{display:flex;align-items:baseline;gap:6px;border-bottom:2px solid var(--line);padding-bottom:6px}
+.amount span{font:700 32px var(--display);color:var(--muted)}
+.amount input{border:none;background:none;padding:0;font:800 44px var(--display);letter-spacing:-.03em}
+.amount input:focus-visible{outline:none}
+.amount:focus-within{border-color:var(--accent)}
+@keyframes up{from{transform:translateY(100%)}to{transform:none}}
+.toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
-@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.sheet{animation:none}}
 </style>
 </head>
 <body>
@@ -98,21 +116,11 @@ nav button[aria-current="page"]{color:var(--accent);box-shadow:inset 0 3px 0 var
   <section class="view" id="v-today">
     <div style="display:grid;gap:14px">
       <div class="card hero">
-        <div class="row"><span class="muted small" id="heroLabel">Left until next payday</span><span class="small" id="heroPayday"></span></div>
+        <div class="row"><span class="eyebrow muted" id="heroLabel">Left until payday</span><span class="pill info" id="heroPayday"></span></div>
         <div class="big" id="heroLeft">—</div>
         <div class="muted small" id="heroSub"></div>
       </div>
 
-      <form class="card" id="addForm" autocomplete="off">
-        <h2>Log spending</h2>
-        <div class="inline">
-          <div><label class="small muted" for="amt">Amount (₱)</label><input id="amt" inputmode="decimal" placeholder="250" required></div>
-          <div><label class="small muted" for="dt">Date</label><input id="dt" type="date" required></div>
-        </div>
-        <div class="chips" id="catChips" role="group" aria-label="Category"></div>
-        <div><label class="small muted" for="note">Note (optional)</label><input id="note" placeholder="e.g. lunch, 1 pack"></div>
-        <button class="primary" type="submit" id="addBtn">Add</button>
-      </form>
 
       <div class="card">
         <div class="row"><h2>This pay period</h2><span class="small muted" id="monthName"></span></div>
@@ -148,7 +156,7 @@ nav button[aria-current="page"]{color:var(--accent);box-shadow:inset 0 3px 0 var
   <section class="view" id="v-debts" hidden>
     <div style="display:grid;gap:14px">
       <div class="card hero">
-        <span class="muted small">Installments left to pay</span>
+        <span class="eyebrow muted">Installments left to pay</span>
         <div class="big" id="debtTotal">—</div>
         <div class="muted small" id="debtFree"></div>
       </div>
@@ -170,11 +178,24 @@ nav button[aria-current="page"]{color:var(--accent);box-shadow:inset 0 3px 0 var
 </main>
 
 <nav><div class="in">
-  <button data-v="today" aria-current="page">Today</button>
-  <button data-v="paydays">Paydays</button>
-  <button data-v="debts">Debts</button>
-  <button data-v="settings">Budget</button>
+  <button class="tab" data-v="today" aria-current="page"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Today</button>
+  <button class="tab" data-v="paydays"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Paydays</button>
+  <button class="fab" id="fab" type="button" aria-label="Log spending"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="tab" data-v="debts"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Debts</button>
+  <button class="tab" data-v="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Budget</button>
 </div></nav>
+<div class="backdrop" id="backdrop" hidden></div>
+<form class="sheet" id="addForm" autocomplete="off" hidden aria-label="Log spending">
+  <div class="grab"></div>
+  <div class="row"><h2>Log spending</h2><button class="ghost" type="button" id="closeSheet">Cancel</button></div>
+  <label class="amount" for="amt"><span>₱</span><input id="amt" inputmode="decimal" placeholder="0" required></label>
+  <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+  <div class="inline">
+    <div><label class="small muted" for="note">Note</label><input id="note" placeholder="lunch, 1 pack…"></div>
+    <div><label class="small muted" for="dt">Date</label><input id="dt" type="date" required></div>
+  </div>
+  <button class="primary" type="submit" id="addBtn">Save</button>
+</form>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -296,7 +317,7 @@ function render(){
   const list=$("entries"); list.textContent="";
   const sorted=[...mine].sort((a,b)=>(b.date+(b.ts||"")).localeCompare(a.date+(a.ts||"")));
   $("entryCount").textContent=sorted.length?sorted.length+" items":"";
-  if(!sorted.length){list.innerHTML='<div class="small muted">Nothing logged yet this pay period. Add your first purchase above.</div>'}
+  if(!sorted.length){list.innerHTML='<div class="small muted">Nothing logged yet. Tap + to log a purchase.</div>'}
   const catName=id=>(CATS().find(c=>c.id===id)||{name:id}).name;
   sorted.forEach(e=>{
     const r=document.createElement("div");r.className="item";
@@ -384,17 +405,21 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   if(!(v>0)){toast("Enter an amount");return}
   const btn=$("addBtn");btn.disabled=true;
   const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:$("dt").value,cat:selCat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80),ts:new Date().toISOString()};
-  expenses=[...expenses,exp]; render();
+  expenses=[...expenses,exp]; render(); closeSheet();
   try{await call("add",{expense:exp});$("amt").value="";$("note").value="";toast("Logged "+peso2(v));}
   catch(e){expenses=expenses.filter(x=>x.id!==exp.id);render();toast("Couldn't save. Check your connection.")}
   btn.disabled=false;
 };
 
-document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll("nav button").forEach(x=>x.toggleAttribute("aria-current",x===b)); b.setAttribute("aria-current","page");
+document.querySelectorAll("nav .tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav .tab").forEach(x=>x.toggleAttribute("aria-current",x===b)); b.setAttribute("aria-current","page");
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.v); window.scrollTo(0,0);
 });
 $("dt").value=ymd(new Date());
+function openSheet(){$("dt").value=ymd(new Date());$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
+function closeSheet(){$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
+$("fab").onclick=openSheet; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
 /* ---------- data ---------- */
 let API=null, PASS=null;
