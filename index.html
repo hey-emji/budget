@@ -121,13 +121,24 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
 .hero .sk{background:linear-gradient(90deg,rgba(128,128,128,.25),rgba(128,128,128,.12),rgba(128,128,128,.25));background-size:200% 100%}
 .sk.big{height:40px;border-radius:12px} .w30{width:30%} .w40{width:40%} .w50{width:50%} .w60{width:60%} .w70{width:70%} .w80{width:80%}
 @keyframes shim{from{background-position:200% 0}to{background-position:-200% 0}}
+.hero.sticky{position:sticky;top:calc(8px + env(safe-area-inset-top));z-index:4;transition:padding .3s ease,border-radius .3s ease,box-shadow .3s ease}
+.hero.sticky .big{transition:font-size .3s ease}
+.hero.sticky #heroSub{max-height:40px;overflow:hidden;transition:max-height .3s ease,opacity .25s ease}
+.hero.sticky.compact{padding:12px 16px;border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.18)}
+.hero.sticky.compact .big{font-size:28px}
+.hero.sticky.compact #heroSub{max-height:0;opacity:0}
+.hero.sticky.compact{gap:6px}
+.view.in-right{animation:slideR .32s cubic-bezier(.2,.8,.2,1)}
+.view.in-left{animation:slideL .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes slideR{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes slideL{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
 .reveal>.card{animation:rise .5s cubic-bezier(.2,.8,.2,1) both}
 .reveal>.card:nth-child(2){animation-delay:.07s} .reveal>.card:nth-child(3){animation-delay:.14s} .reveal>.card:nth-child(4){animation-delay:.21s} .reveal>.card:nth-child(5){animation-delay:.28s}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes up{from{transform:translateY(100%)}to{transform:none}}
 .toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
-@media (prefers-reduced-motion:reduce){#brandText{transition:none}.toast{transition:none}.sheet,.dialog,.reveal>.card{animation:none}.sk{animation:none}}
+@media (prefers-reduced-motion:reduce){.view.in-right,.view.in-left{animation:none}.hero.sticky,.hero.sticky .big,.hero.sticky #heroSub{transition:none}#brandText{transition:none}.toast{transition:none}.sheet,.dialog,.reveal>.card{animation:none}.sk{animation:none}}
 </style>
 </head>
 <body>
@@ -153,7 +164,7 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
       <div class="card"><div class="sk w50"></div><div class="sk"></div><div class="sk"></div><div class="sk w60"></div></div>
     </div>
     <div style="display:grid;gap:14px" id="todayContent" hidden>
-      <div class="card hero">
+      <div class="card hero sticky" id="todayHero">
         <div class="row"><span class="eyebrow muted" id="heroLabel">Left until payday</span><span class="pill info" id="heroPayday"></span></div>
         <div class="big" id="heroLeft">—</div>
         <div class="muted small" id="heroSub"></div>
@@ -520,10 +531,17 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   btn.disabled=false;
 };
 
+const ORDER=["today","paydays","debts","settings"]; let curView="today";
 document.querySelectorAll("nav .tab").forEach(b=>b.onclick=()=>{
+  const to=b.dataset.v; if(to===curView){window.scrollTo({top:0,behavior:"smooth"});return}
+  const dir=ORDER.indexOf(to)>ORDER.indexOf(curView)?"right":"left"; curView=to;
   document.querySelectorAll("nav .tab").forEach(x=>x.toggleAttribute("aria-current",x===b)); b.setAttribute("aria-current","page");
-  document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.v); window.scrollTo(0,0);
+  document.querySelectorAll(".view").forEach(v=>{const on=v.id==="v-"+to; v.hidden=!on; v.classList.remove("in-right","in-left"); if(on){void v.offsetWidth; v.classList.add("in-"+dir)}});
+  window.scrollTo(0,0); compactHero(false);
 });
+const heroEl=$("todayHero"); let isCompact=false;
+function compactHero(on){if(on===isCompact)return;isCompact=on;heroEl.classList.toggle("compact",on)}
+window.addEventListener("scroll",()=>{const y=window.scrollY; if(!isCompact&&y>110)compactHero(true); else if(isCompact&&y<30)compactHero(false)},{passive:true});
 $("dt").value=ymd(new Date());
 let ctx=null;
 function pickCat(id){selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===id))}
