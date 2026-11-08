@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f4ad0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<title>Budget</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: one phone-width column; summary first, detail below; bottom tab bar */
+  --bg:#eef1f6; --surface:#ffffff; --ink:#14192b; --muted:#5d6579; --line:#d9dee8;
+  --accent:#2f4ad0; --accent-soft:#e3e8fb;
+  --good:#1d7a4c; --good-soft:#dff2e7; --warn:#a15c00; --warn-soft:#fbefd9; --bad:#b42318; --bad-soft:#fbe4e1;
+  --display:"Archivo",system-ui,sans-serif; --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1220; --surface:#171c2e; --ink:#e9ecf5; --muted:#9aa2b8; --line:#2a3148;
+  --accent:#8ea0ff; --accent-soft:#232c55;
+  --good:#5fd39a; --good-soft:#163829; --warn:#f2b55c; --warn-soft:#3a2c14; --bad:#ff8a7d; --bad-soft:#3d1c1a; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0e1220; --surface:#171c2e; --ink:#e9ecf5; --muted:#9aa2b8; --line:#2a3148;
+  --accent:#8ea0ff; --accent-soft:#232c55;
+  --good:#5fd39a; --good-soft:#163829; --warn:#f2b55c; --warn-soft:#3a2c14; --bad:#ff8a7d; --bad-soft:#3d1c1a; color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-variant-numeric:tabular-nums}
+main{max-width:520px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px 96px;display:grid;gap:14px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:22px;font-weight:800}
+h2{font-size:16px;font-weight:700}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.big{font-family:var(--display);font-size:34px;font-weight:800;line-height:1.05}
+.hero{background:var(--accent);color:#fff;border:none}
+.hero .muted{color:rgba(255,255,255,.78)}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.info{background:var(--accent-soft);color:var(--accent)}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar>span{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.bar.good>span{background:var(--good)} .bar.warn>span{background:var(--warn)} .bar.bad>span{background:var(--bad)}
+.cat{display:grid;gap:5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:6px 10px;border-radius:999px;font:500 13px var(--body);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+input,select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
+.inline{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button.primary{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 14px;font:600 15px var(--body);cursor:pointer}
+button.ghost{background:none;border:none;color:var(--muted);font:500 13px var(--body);cursor:pointer;padding:4px 6px}
+button:focus-visible,input:focus-visible,.chip:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.list{display:grid}
+.item{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:none}
+.item .t{display:grid}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:6px 0;text-align:left;border-top:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:12px;border-top:none}
+td.n,th.n{text-align:right}
+tr.total td{font-weight:700}
+.debt{display:grid;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.debt:first-of-type{border-top:none}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+nav .in{display:grid;grid-template-columns:repeat(4,1fr);max-width:520px;width:100%}
+nav button{background:none;border:none;padding:12px 4px;font:600 13px var(--body);color:var(--muted);cursor:pointer}
+nav button[aria-current="page"]{color:var(--accent);box-shadow:inset 0 3px 0 var(--accent)}
+.view[hidden]{display:none}
+.notice{font-size:13px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn)}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <header class="row">
+    <div><h1>Budget</h1><div class="muted small" id="today"></div></div>
+    <span class="pill info" id="syncPill">Loading…</span>
+  </header>
+  <div id="notice" class="notice" hidden></div>
+  <form class="card" id="setupForm" hidden autocomplete="off">
+    <h2>Connect your budget</h2>
+    <div class="small muted">Paste the web app link from your Google Sheet script and the passcode you set in it. You only do this once on this phone.</div>
+    <div><label class="small muted" for="apiUrl">Script web app link</label><input id="apiUrl" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <div><label class="small muted" for="passIn">Passcode</label><input id="passIn" type="password"></div>
+    <button class="primary" type="submit">Connect</button>
+  </form>
+
+  <!-- TODAY -->
+  <section class="view" id="v-today">
+    <div style="display:grid;gap:14px">
+      <div class="card hero">
+        <div class="row"><span class="muted small" id="heroLabel">Left until next payday</span><span class="small" id="heroPayday"></span></div>
+        <div class="big" id="heroLeft">—</div>
+        <div class="muted small" id="heroSub"></div>
+      </div>
+
+      <form class="card" id="addForm" autocomplete="off">
+        <h2>Log spending</h2>
+        <div class="inline">
+          <div><label class="small muted" for="amt">Amount (₱)</label><input id="amt" inputmode="decimal" placeholder="250" required></div>
+          <div><label class="small muted" for="dt">Date</label><input id="dt" type="date" required></div>
+        </div>
+        <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+        <div><label class="small muted" for="note">Note (optional)</label><input id="note" placeholder="e.g. lunch, 1 pack"></div>
+        <button class="primary" type="submit" id="addBtn">Add</button>
+      </form>
+
+      <div class="card">
+        <div class="row"><h2>This pay period</h2><span class="small muted" id="monthName"></span></div>
+        <div id="cutNote" class="notice" hidden></div>
+        <div id="cats" style="display:grid;gap:12px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Coming up</h2>
+        <div id="dueList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><h2>Entries this pay period</h2><span class="small muted" id="entryCount"></span></div>
+        <div id="entries" class="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAYDAYS -->
+  <section class="view" id="v-paydays" hidden>
+    <div style="display:grid;gap:14px">
+      <div class="card" id="nextPayCard"></div>
+      <div class="card">
+        <h2>Next 12 paydays</h2>
+        <div style="overflow-x:auto"><table id="payTable"></table></div>
+        <div class="small muted">Leftover after installments, bills, living money and the cigarette envelope. If a paycheck is short, the app cuts dine-out first, then misc, then cigarettes, then groceries.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEBTS -->
+  <section class="view" id="v-debts" hidden>
+    <div style="display:grid;gap:14px">
+      <div class="card hero">
+        <span class="muted small">Installments left to pay</span>
+        <div class="big" id="debtTotal">—</div>
+        <div class="muted small" id="debtFree"></div>
+      </div>
+      <div class="card" id="cardCard"></div>
+      <div class="card"><h2>Installments</h2><div id="debtList"></div></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="v-settings" hidden>
+    <form class="card" id="setForm">
+      <h2>Monthly budget</h2>
+      <div id="setFields" style="display:grid;gap:10px"></div>
+      <button class="primary" type="submit">Save changes</button>
+      <div class="small muted">Installments, bills and subscriptions are set by Claude. Ask in your budget chat to change them.</div>
+      <button class="ghost" type="button" id="disconnect">Disconnect this phone</button>
+    </form>
+  </section>
+</main>
+
+<nav><div class="in">
+  <button data-v="today" aria-current="page">Today</button>
+  <button data-v="paydays">Paydays</button>
+  <button data-v="debts">Debts</button>
+  <button data-v="settings">Budget</button>
+</div></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const peso=n=>(n<0?"−":"")+"₱"+Math.abs(n).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:0});
+const peso2=n=>(n<0?"−":"")+"₱"+Math.abs(n).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pad=n=>String(n).padStart(2,"0");
+const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const mkey=d=>d.getFullYear()+"-"+pad(d.getMonth()+1);
+const mAdd=(k,n)=>{let[y,m]=k.split("-").map(Number);m+=n;y+=Math.floor((m-1)/12);m=((m-1)%12+12)%12+1;return y+"-"+pad(m)};
+const mDiff=(a,b)=>{const[ay,am]=a.split("-").map(Number),[by,bm]=b.split("-").map(Number);return (by-ay)*12+(bm-am)};
+const mName=(k,long)=>{const[y,m]=k.split("-").map(Number);return new Date(y,m-1,1).toLocaleDateString("en-PH",{month:long?"long":"short",year:"numeric"})};
+const dName=d=>d.toLocaleDateString("en-PH",{month:"short",day:"numeric"});
+const lastDay=(y,m)=>new Date(y,m+1,0).getDate();
+const payDate=(y,m,half)=>new Date(y,m,half===1?15:Math.min(30,lastDay(y,m)));
+
+let config=null, expenses=[], paydays={}, db=null, selCat=null, now=new Date();
+
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("on"),1800)}
+
+/* ---------- plan math ---------- */
+function debtEnd(d){return mAdd(config.startMonth,d.total-d.current)}
+function debtActive(d,m){return m>=config.startMonth && m<=debtEnd(d)}
+function cigCap(m){const p=[...(config.cigPlan||[])].sort((a,b)=>a.month<b.month?-1:1);let c=p.length?p[0].cap:0;for(const x of p) if(x.month<=m) c=x.cap;return c}
+function sum(a,f){return a.reduce((s,x)=>s+(Number(f(x))||0),0)}
+function instMonth(m){return sum(config.debts.filter(d=>debtActive(d,m)),d=>d.monthly)}
+function creditMonth(m){return sum((config.credits||[]).filter(c=>c.month===m),c=>c.amount)}
+function plan(date){
+  const m=mkey(date), key=ymd(date);
+  const income=paydays[key]?.income ?? config.incomePerPayday;
+  const inst=(instMonth(m)-creditMonth(m))/2;
+  const bills=sum(config.bills,b=>b.amount)/2;
+  const living=(sum(config.spend,s=>s.amount)+sum(config.subs,s=>s.amount))/2;
+  const cig=cigCap(m)/2;
+  const left=income-inst-bills-living-cig;
+  const half=id=>id==="cigarettes"?cig:(config.spend.find(s=>s.id===id)?.amount||0)/2;
+  const names={foodout:"Dine-out",misc:"Misc",cigarettes:"Cigarettes",groceries:"Groceries"};
+  const cuts=[]; let short=left<0?-left:0;
+  for(const id of ["foodout","misc","cigarettes","groceries"]){ if(short<=0) break; const c=Math.min(half(id),short); if(c>0){cuts.push({id,name:names[id],amount:c}); short-=c;} }
+  return {date,key,m,income,actual:paydays[key]?.income!=null,inst,bills,living,cig,left,cuts,uncovered:short,final:left<0?-short:left};
+}
+function upcomingPaydays(n){
+  const out=[];let y=now.getFullYear(),mo=now.getMonth(),half=now.getDate()<=15?1:2;
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  while(out.length<n){const d=payDate(y,mo,half);if(d>=today)out.push(d);if(half===1)half=2;else{half=1;mo++;if(mo>11){mo=0;y++}}}
+  return out;
+}
+function budgetsFor(m){
+  return [...config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount})),{id:"cigarettes",name:"Cigarettes",amount:cigCap(m)}];
+}
+function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate(),ld=lastDay(y,mo);
+  let start; if(d>=Math.min(30,ld)) start=payDate(y,mo,2); else if(d>=15) start=payDate(y,mo,1); else {const py=mo===0?y-1:y,pm=mo===0?11:mo-1;start=payDate(py,pm,2)}
+  const sy=start.getFullYear(),sm=start.getMonth(); let end;
+  if(start.getDate()===15) end=payDate(sy,sm,2); else end=sm===11?payDate(sy+1,0,1):payDate(sy,sm+1,1);
+  return {start,end};}
+const CATS=()=>[...budgetsFor(mkey(now)).map(b=>({id:b.id,name:b.name})),{id:"other",name:"Other"}];
+
+/* ---------- render ---------- */
+function render(){
+  if(!config) return;
+  now=new Date();
+  const m=mkey(now);
+  $("today").textContent=now.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"});
+  const per=periodNow(), pS=ymd(per.start), pE=ymd(per.end);
+  $("monthName").textContent=dName(per.start)+" – "+dName(new Date(per.end.getTime()-864e5));
+  // chips
+  const chips=$("catChips"); if(!chips.dataset.built){chips.dataset.built=1;
+    CATS().forEach((c,i)=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c.name;b.dataset.id=c.id;b.setAttribute("aria-pressed",i===0);b.onclick=()=>{selCat=c.id;chips.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b))};chips.appendChild(b)});
+    selCat=CATS()[0].id;}
+  // month spend
+  const mine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE);
+  const pp=plan(per.start); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
+  const budgets=budgetsFor(mkey(per.start)).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
+  const cn=$("cutNote"); if(pp.cuts.length){cn.hidden=false;cn.textContent=`Pay on ${dName(per.start)} was ${peso(config.incomePerPayday-pp.income)} lower, so this period's budget was cut: `+pp.cuts.map(c=>`${c.name} −${peso(c.amount)}`).join(", ")+(pp.uncovered>0?`. Still short ${peso(pp.uncovered)}: cover it from cash on hand.`:".");} else cn.hidden=true;
+  let totB=0,totS=0; const box=$("cats"); box.textContent="";
+  budgets.forEach(b=>{
+    const spent=sum(mine.filter(e=>e.cat===b.id),e=>e.amount); totB+=b.amount; totS+=spent;
+    const pct=b.amount?spent/b.amount:0, st=pct>1?"bad":pct>.8?"warn":"good";
+    const el=document.createElement("div"); el.className="cat";
+    el.innerHTML=`<div class="row"><strong></strong><span class="small"><span class="pill ${st}"></span></span></div><div class="bar ${st}"><span style="width:${Math.min(100,pct*100).toFixed(1)}%"></span></div><div class="row small muted"><span></span><span></span></div>`;
+    el.querySelector("strong").textContent=b.name;
+    el.querySelector(".pill").textContent=pct>1?peso(spent-b.amount)+" over":peso(b.amount-spent)+" left";
+    const s=el.querySelectorAll(".row.small span"); s[0].textContent=peso(spent)+" spent"; s[1].textContent="of "+peso(b.amount);
+    box.appendChild(el);
+  });
+  const other=sum(mine.filter(e=>e.cat==="other"),e=>e.amount);
+  if(other){const p=document.createElement("div");p.className="row small";p.innerHTML='<span>Other (not budgeted)</span><strong></strong>';p.querySelector("strong").textContent=peso(other);box.appendChild(p)}
+  const left=totB-totS-other;
+  $("heroLeft").textContent=peso(left);
+  const daysLeft=Math.max(1,Math.round((per.end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
+  $("heroSub").textContent=`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
+  const next=upcomingPaydays(1)[0], dd=Math.round((next-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
+  $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
+
+  // due list
+  const due=$("dueList"); due.textContent="";
+  const groups={}; config.debts.forEach(d=>{if(!debtActive(d,m))return;(groups[d.lender]=groups[d.lender]||{lender:d.lender,day:d.dueDay,amt:0,items:[]});groups[d.lender].amt+=d.monthly;groups[d.lender].items.push(d.name)});
+  const nm=mAdd(m,1),[ny,nmo]=nm.split("-").map(Number);
+  Object.values(groups).sort((a,b)=>a.day-b.day).forEach(g=>{
+    const credit=sum((config.credits||[]).filter(c=>c.month===m&&c.lender===g.lender),c=>c.amount);
+    const r=document.createElement("div");r.className="item";
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill info"></span><strong></strong>';
+    r.querySelector("strong").textContent=g.lender;
+    r.querySelector(".t .small").textContent=g.items.join(", ")+(credit?` · ${peso(credit)} credit applied`:"");
+    r.querySelector(".pill").textContent=dName(new Date(ny,nmo-1,g.day));
+    r.lastChild.textContent=peso2(g.amt-credit);
+    due.appendChild(r);
+  });
+  if(config.card && config.card.carryover>0){
+    const r=document.createElement("div");r.className="item";
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill warn">Extra</span><strong></strong>';
+    r.querySelector("strong").textContent=config.card.name+" carried-over balance";
+    r.querySelector(".t .small").textContent="Not in the plan yet · gets finance charges monthly";
+    r.lastChild.textContent=peso2(config.card.carryover);
+    due.appendChild(r);
+  }
+
+  // entries
+  const list=$("entries"); list.textContent="";
+  const sorted=[...mine].sort((a,b)=>(b.date+(b.ts||"")).localeCompare(a.date+(a.ts||"")));
+  $("entryCount").textContent=sorted.length?sorted.length+" items":"";
+  if(!sorted.length){list.innerHTML='<div class="small muted">Nothing logged yet this pay period. Add your first purchase above.</div>'}
+  const catName=id=>(CATS().find(c=>c.id===id)||{name:id}).name;
+  sorted.forEach(e=>{
+    const r=document.createElement("div");r.className="item";
+    r.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong></strong><button class="ghost" aria-label="Delete entry">Delete</button>';
+    r.querySelector(".t span").textContent=e.note||catName(e.cat);
+    r.querySelector(".t .small").textContent=catName(e.cat)+" · "+dName(new Date(e.date+"T00:00"));
+    r.querySelector("strong").textContent=peso2(e.amount);
+    r.querySelector("button").onclick=async()=>{try{await call("delete",{id:e.id});toast("Deleted")}catch(err){toast("Couldn't delete. Try again.")}};
+    list.appendChild(r);
+  });
+
+  renderPaydays(); renderDebts(); renderSettings();
+}
+
+function renderPaydays(){
+  const pds=upcomingPaydays(12), p=plan(pds[0]);
+  const c=$("nextPayCard");
+  c.innerHTML=`<div class="row"><h2>${dName(p.date)} payday</h2><span class="pill ${p.final<0?"bad":p.cuts.length?"warn":"good"}">${p.final<0?peso(-p.final)+" short":peso(p.final)+" left over"}</span></div>
+  <table><tbody>
+   <tr><td>Pay</td><td class="n">${peso2(p.income)}${p.actual?"":' <span class="small muted">(expected)</span>'}</td></tr>
+   <tr><td>Installments (half of month)</td><td class="n">−${peso2(p.inst)}</td></tr>
+   <tr><td>Bills (electricity, water, HOA)</td><td class="n">−${peso2(p.bills)}</td></tr>
+   <tr><td>Living money + subscriptions</td><td class="n">−${peso2(p.living)}</td></tr>
+   <tr><td>Cigarette envelope</td><td class="n">−${peso2(p.cig)}</td></tr>
+   ${p.cuts.map(c=>`<tr><td>Cut: ${c.name}</td><td class="n">+${peso2(c.amount)}</td></tr>`).join("")}
+   <tr class="total"><td>${p.final<0?"Still short":"Left over"}</td><td class="n">${peso2(p.final)}</td></tr>
+   ${p.uncovered>0?`<tr><td colspan="2" class="small muted">Use cash on hand or the Unionbank buffer for the shortfall. Installments and bills stay fully covered first.</td></tr>`:""}
+  </tbody></table>
+  <form id="payForm" class="inline" style="align-items:end"><div><label class="small muted" for="payAmt">Actual pay received</label><input id="payAmt" inputmode="decimal" placeholder="${p.income}"></div><button class="primary" type="submit">Save pay</button></form>`;
+  $("payForm").onsubmit=async ev=>{ev.preventDefault();const v=parseFloat($("payAmt").value.replace(/,/g,""));if(!(v>0)){toast("Enter the amount you received");return}
+    try{await call("setPay",{date:p.key,income:v});toast("Pay saved")}catch(e){toast("Couldn't save. Try again.")}};
+  const t=$("payTable");
+  t.innerHTML='<thead><tr><th>Payday</th><th class="n">Installments</th><th class="n">Left over</th></tr></thead>';
+  const tb=document.createElement("tbody");
+  pds.forEach(d=>{const q=plan(d);const tr=document.createElement("tr");tr.innerHTML=`<td>${dName(d)}${d.getMonth()===0&&d.getDate()===15?" "+d.getFullYear():""}</td><td class="n">${peso(q.inst)}</td><td class="n"><span class="pill ${q.final<0?"bad":q.cuts.length||q.final<2000?"warn":"good"}">${peso(q.final)}</span></td>`;tb.appendChild(tr)});
+  t.appendChild(tb);
+}
+
+function renderDebts(){
+  const m=mkey(now); let total=0, last=config.startMonth;
+  const box=$("debtList"); box.textContent="";
+  [...config.debts].sort((a,b)=>debtEnd(a)<debtEnd(b)?-1:1).forEach(d=>{
+    const end=debtEnd(d); if(end>last) last=end;
+    const n=Math.min(d.total, d.current+Math.max(0,mDiff(config.startMonth,m)));
+    const done=m>end, leftN=done?0:d.total-n+1, bal=leftN*d.monthly; total+=bal;
+    const el=document.createElement("div"); el.className="debt";
+    el.innerHTML=`<div class="row"><strong></strong><span class="pill ${done?"good":leftN<=2?"warn":"info"}"></span></div><div class="bar ${done?"good":""}"><span style="width:${(done?100:(n-1)/d.total*100).toFixed(1)}%"></span></div><div class="row small muted"><span></span><span></span></div>`;
+    el.querySelector("strong").textContent=d.name;
+    el.querySelector(".pill").textContent=done?"Paid off":leftN===1?"Last payment":`${leftN} payments left`;
+    const s=el.querySelectorAll(".row.small span");
+    s[0].textContent=done?`Finished ${mName(end)}`:`Payment ${n} of ${d.total} · ${peso2(d.monthly)}/mo · ${d.lender}`;
+    s[1].textContent=done?"":`Ends ${mName(end)}`;
+    box.appendChild(el);
+  });
+  $("debtTotal").textContent=peso2(total);
+  $("debtFree").textContent=`Installment-free after ${mName(last,true)} · ${peso2(instMonth(m))} due this month`;
+  const c=config.card, cc=$("cardCard");
+  if(c){cc.innerHTML=`<div class="row"><h2></h2><span class="pill warn">Carried over</span></div>
+   <div class="row"><span>Unpaid from last statement</span><strong>${peso2(c.carryover)}</strong></div>
+   <div class="row small muted"><span>Last finance charge</span><span>${peso2(c.financeCharge||0)}</span></div>
+   <div class="row small muted"><span>Balance in app</span><span>${peso2(c.balance||0)}</span></div>
+   <div class="small muted">${c.note||""}</div>`;cc.querySelector("h2").textContent=c.name+" card";}
+}
+
+function renderSettings(){
+  const f=$("setFields"); if(f.dataset.built) return; f.dataset.built=1;
+  const add=(id,label,val)=>{const w=document.createElement("div");w.innerHTML=`<label class="small muted" for="${id}"></label><input id="${id}" inputmode="decimal">`;w.querySelector("label").textContent=label;w.querySelector("input").value=val;f.appendChild(w)};
+  add("s-income","Pay per payday (₱)",config.incomePerPayday);
+  config.spend.forEach(s=>add("s-"+s.id,s.name+" per month (₱)",s.amount));
+  const m=mkey(now); add("s-cig","Cigarettes cap for "+mName(m,true)+" (₱)",cigCap(m));
+}
+$("setForm").onsubmit=async ev=>{ev.preventDefault();
+  const num=id=>{const v=parseFloat(String($(id).value).replace(/,/g,""));return v>=0?v:null};
+  const inc=num("s-income"); if(inc==null){toast("Check the pay amount");return}
+  const spend=config.spend.map(s=>({...s,amount:num("s-"+s.id)??s.amount}));
+  const m=mkey(now), cv=num("s-cig");
+  let cig=(config.cigPlan||[]).map(x=>({...x}));
+  if(cv!=null){const i=cig.findIndex(x=>x.month===m); if(i>=0) cig[i].cap=cv; else cig.push({month:m,cap:cv});}
+  try{await call("setConfig",{patch:{incomePerPayday:inc,spend,cigPlan:cig}});toast("Budget saved")}catch(e){toast("Couldn't save. Try again.")}
+};
+
+$("addForm").onsubmit=async ev=>{ev.preventDefault();
+  if(!config){toast("Not connected yet");return}
+  const v=parseFloat($("amt").value.replace(/,/g,""));
+  if(!(v>0)){toast("Enter an amount");return}
+  const btn=$("addBtn");btn.disabled=true;
+  const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:$("dt").value,cat:selCat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80),ts:new Date().toISOString()};
+  expenses=[...expenses,exp]; render();
+  try{await call("add",{expense:exp});$("amt").value="";$("note").value="";toast("Logged "+peso2(v));}
+  catch(e){expenses=expenses.filter(x=>x.id!==exp.id);render();toast("Couldn't save. Check your connection.")}
+  btn.disabled=false;
+};
+
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.toggleAttribute("aria-current",x===b)); b.setAttribute("aria-current","page");
+  document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.v); window.scrollTo(0,0);
+});
+$("dt").value=ymd(new Date());
+
+/* ---------- data ---------- */
+let API=null, PASS=null;
+try{API=localStorage.getItem("budget.api");PASS=localStorage.getItem("budget.pass")}catch(e){}
+function setNotice(t){const n=$("notice");n.hidden=!t;n.textContent=t||""}
+function apply(j){
+  if(!j||j.error) throw new Error(j&&j.error||"bad_response");
+  config=j.config; expenses=j.expenses||[]; paydays=j.paydays||{};
+  $("syncPill").textContent="Synced"; setNotice(""); $("setupForm").hidden=true; render();
+}
+async function load(){
+  if(!API||!PASS){$("setupForm").hidden=false;$("syncPill").textContent="Not connected";return}
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),15000);
+  try{const r=await fetch(API+"?pass="+encodeURIComponent(PASS),{signal:ctl.signal});apply(await r.json())}
+  catch(e){
+    if(String(e.message)==="wrong_passcode"){$("setupForm").hidden=false;setNotice("That passcode didn't match the one in your script.");$("syncPill").textContent="Not connected";}
+    else{$("syncPill").textContent="Offline";setNotice(config?"Couldn't refresh. Showing what was loaded before.":"Can't reach your budget sheet. Check your connection and reopen the app.")}
+  } finally{clearTimeout(t)}
+}
+async function call(action,data){
+  $("syncPill").textContent="Saving…";
+  const r=await fetch(API,{method:"POST",body:JSON.stringify({pass:PASS,action,...data})});
+  apply(await r.json());
+}
+$("setupForm").onsubmit=ev=>{ev.preventDefault();
+  const u=$("apiUrl").value.trim(), p=$("passIn").value;
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u)){toast("Paste the link that ends in /exec");return}
+  if(!p){toast("Enter your passcode");return}
+  API=u;PASS=p;try{localStorage.setItem("budget.api",u);localStorage.setItem("budget.pass",p)}catch(e){}
+  $("syncPill").textContent="Loading…";load();
+};
+$("disconnect").onclick=()=>{try{localStorage.removeItem("budget.api");localStorage.removeItem("budget.pass")}catch(e){};location.reload()};
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")load()});
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
+load();
+</script>
+</body>
+</html>
