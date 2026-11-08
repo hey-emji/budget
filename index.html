@@ -468,8 +468,8 @@ function renderPaydays(){
   const c=$("nextPayCard");
   c.innerHTML=`<div class="pernav"><button type="button" id="pdPrev" aria-label="Previous payday" ${pdIdx===0?"disabled":""}>‹</button><span>${pdIdx===0?"Next payday · ":""}${dName(p.date)}</span><button type="button" id="pdNext" aria-label="Next payday">›</button></div>
   <div class="row"><h2>Payday plan</h2><span class="pill ${p.final<0?"bad":p.cuts.length?"warn":"good"}">${p.final<0?peso(-p.final)+" short":peso(p.final)+" to save"}</span></div>
-  <div class="row"><span>Pay ${p.actual?"received":'<span class="small muted">(expected)</span>'}</span><strong class="bigish">${peso2(p.income)}</strong></div>
-  <form id="payForm" class="inline" style="align-items:end"><div><label class="small muted" for="payAmt">Actual pay for ${dName(p.date)}</label><input id="payAmt" inputmode="decimal" placeholder="${p.income}"></div><button class="primary" type="submit">Update pay</button></form>
+  <div class="row"><span>Pay ${p.actual?(p.date>new Date()?'<span class="small muted">(your estimate)</span>':"received"):'<span class="small muted">(expected)</span>'}</span><strong class="bigish">${peso2(p.income)}</strong></div>
+  <form id="payForm" class="inline" style="align-items:end"><div><label class="small muted" for="payAmt">Actual or expected pay for ${dName(p.date)}</label><input id="payAmt" inputmode="decimal" placeholder="${p.income}"></div><button class="primary" type="submit">Update pay</button></form>
   <div class="row small muted"><span>Set aside so far</span><span>${peso(done)} of ${peso(total)}</span></div>
   <div class="bar"><span style="width:${total?Math.min(100,done/total*100).toFixed(1):0}%"></span></div>
   <div id="planGroups"></div>
