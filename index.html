@@ -94,6 +94,14 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .amount input{border:none;background:none;padding:0;font:800 44px var(--display);letter-spacing:-.03em}
 .amount input:focus-visible{outline:none}
 .amount:focus-within{border-color:var(--accent)}
+.pernav{display:flex;justify-content:space-between;align-items:center;padding:6px;grid-template-columns:none}
+.pernav span{font-weight:600;font-size:14px}
+.pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
+.pernav button:disabled{opacity:.35;cursor:default}
+.tap{cursor:pointer}
+.quickrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.quick{flex:none;border:1px dashed var(--line);background:var(--bg);color:var(--ink);padding:7px 12px;border-radius:999px;font:500 13px var(--body);cursor:pointer;white-space:nowrap}
+.bigish{font:800 20px var(--display)}
 .paybtn{background:var(--accent-soft);color:var(--accent);border:none;border-radius:999px;padding:6px 11px;font:600 12px var(--body);cursor:pointer}
 .del{background:var(--bad-soft);border:none;color:var(--bad);width:36px;height:36px;border-radius:10px;display:grid;place-items:center;cursor:pointer}
 .del svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -147,14 +155,16 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
       </div>
 
 
+      <div class="pernav card"><button type="button" id="perPrev" aria-label="Previous pay period">‹</button><span id="perLabel"></span><button type="button" id="perNext" aria-label="Next pay period">›</button></div>
+
       <div class="card">
-        <div class="row"><h2>Your Expenses This Period</h2><span class="small muted" id="entryCount"></span></div>
+        <div class="row"><h2 id="expTitle">Your Expenses This Period</h2><span class="small muted" id="entryCount"></span></div>
         <div id="entries" class="list"></div>
         <div id="entryTotal" class="total-row" hidden><div class="t"><span>Total spent this period</span><span class="small muted"></span></div><strong></strong></div>
       </div>
 
       <div class="card">
-        <div class="row"><h2>Your Budget This Period</h2><span class="small muted" id="monthName"></span></div>
+        <div class="row"><h2 id="budTitle">Your Budget This Period</h2><span class="small muted" id="monthName"></span></div>
         <div id="cutNote" class="notice" hidden></div>
         <div id="cats" style="display:grid;gap:12px"></div>
       </div>
@@ -214,7 +224,8 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
 <div class="backdrop" id="backdrop" hidden></div>
 <form class="sheet" id="addForm" autocomplete="off" hidden aria-label="Log spending">
   <div class="grab"></div>
-  <div class="row"><h2>Log spending</h2><button class="ghost" type="button" id="closeSheet">Cancel</button></div>
+  <div class="row"><h2 id="sheetTitle">Log spending</h2><button class="ghost" type="button" id="closeSheet">Cancel</button></div>
+  <div class="quickrow" id="quick" aria-label="Quick add"></div>
   <label class="amount" for="amt"><span>₱</span><input id="amt" inputmode="decimal" placeholder="0" required></label>
   <div class="chips" id="catChips" role="group" aria-label="Category"></div>
   <div class="inline">
@@ -279,6 +290,9 @@ function upcomingPaydays(n){
 function budgetsFor(m){
   return config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount+(s.id==="personal"?cigCap(m):0)}));
 }
+function periodAt(off){let p=periodNow();for(let i=0;i<off;i++){const st=p.start,y=st.getFullYear(),mo=st.getMonth();
+  const ps=st.getDate()===15?(mo===0?payDate(y-1,11,2):payDate(y,mo-1,2)):payDate(y,mo,1);p={start:ps,end:st};}return p}
+let pOff=0;
 function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate(),ld=lastDay(y,mo);
   let start; if(d>=Math.min(30,ld)) start=payDate(y,mo,2); else if(d>=15) start=payDate(y,mo,1); else {const py=mo===0?y-1:y,pm=mo===0?11:mo-1;start=payDate(py,pm,2)}
   const sy=start.getFullYear(),sm=start.getMonth(); let end;
@@ -292,8 +306,10 @@ function render(){
   now=new Date();
   const m=mkey(now);
   $("today").textContent=now.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"});
-  const per=periodNow(), pS=ymd(per.start), pE=ymd(per.end);
-  $("monthName").textContent=dName(per.start)+" – "+dName(new Date(per.end.getTime()-864e5));
+  const per=periodAt(pOff), pS=ymd(per.start), pE=ymd(per.end);
+  const plabel=dName(per.start)+" – "+dName(new Date(per.end.getTime()-864e5));
+  $("monthName").textContent=plabel; $("perLabel").textContent=pOff===0?"This period · "+plabel:plabel; $("perNext").disabled=pOff===0;
+  $("expTitle").textContent=pOff===0?"Your Expenses This Period":"Your Expenses"; $("budTitle").textContent=pOff===0?"Your Budget This Period":"Your Budget";
   // chips
   const chips=$("catChips"); if(!chips.dataset.built){chips.dataset.built=1;
     CATS().forEach((c,i)=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c.name;b.dataset.id=c.id;b.setAttribute("aria-pressed",i===0);b.onclick=()=>{selCat=c.id;chips.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b))};chips.appendChild(b)});
@@ -319,29 +335,36 @@ function render(){
     const s=el.querySelectorAll(".row.small span"); s[0].textContent=peso(spent)+" spent"; s[1].textContent="of "+peso(b.amount);
     box.appendChild(el);
   });
-  const other=sum(mine.filter(e=>e.cat==="other"),e=>e.amount);
+  let other=sum(mine.filter(e=>e.cat==="other"),e=>e.amount);
   if(other){const p=document.createElement("div");p.className="row small";p.innerHTML='<span>Other (not budgeted)</span><strong></strong>';p.querySelector("strong").textContent=peso(other);box.appendChild(p)}
   const paid=sum(mine.filter(e=>e.cat==="utilities"||e.cat==="credit"),e=>e.amount);
   if(paid){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Bills and card payments (from set-asides)</span><strong></strong>';p.querySelector("strong").textContent=peso(paid);box.appendChild(p)}
-  const left=totB-totS-other;
+  let left=totB-totS-other;
+  if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.start);
+    const cb=budgetsFor(mkey(cp.start)).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
+    totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(mkey(cp.start)).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
   $("heroLeft").textContent=peso(left);
-  const daysLeft=Math.max(1,Math.round((per.end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
+  const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
   $("heroSub").textContent=`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
   const next=upcomingPaydays(1)[0], dd=Math.round((next-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
   $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
 
   // due list
   const due=$("dueList"); due.textContent=""; const due_list_first=[],due_list_rest=[];
-  const groups={}; config.debts.forEach(d=>{if(!debtActive(d,m))return;(groups[d.lender]=groups[d.lender]||{lender:d.lender,day:d.dueDay,amt:0,items:[]});groups[d.lender].amt+=d.monthly;groups[d.lender].items.push(d.name)});
-  const nm=mAdd(m,1),[ny,nmo]=nm.split("-").map(Number);
-  Object.values(groups).sort((a,b)=>a.day-b.day).forEach(g=>{
-    const credit=sum((config.credits||[]).filter(c=>c.month===m&&c.lender===g.lender),c=>c.amount);
+  const paidCards=config.paidCards||{}, nm=mAdd(m,1),[ny,nmo]=nm.split("-").map(Number);
+  [...new Set(config.debts.map(d=>d.lender))].map(L=>{
+    const mm=(paidCards[L]||"")>=mAdd(m,1)?mAdd(m,1):m, dm=mAdd(mm,1);
+    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)); if(!ds.length) return null;
+    const credit=sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount);
+    const [dy,dmo]=dm.split("-").map(Number);
+    return {L,items:ds.map(d=>d.name),amt:sum(ds,d=>d.monthly)-credit,credit,date:new Date(dy,dmo-1,ds[0].dueDay),dm};
+  }).filter(Boolean).sort((a,b)=>a.date-b.date).forEach(g=>{
     const r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill info"></span><strong></strong>';
-    r.querySelector("strong").textContent=g.lender;
-    r.querySelector(".t .small").textContent=g.items.join(", ")+(credit?` · ${peso(credit)} credit applied`:"");
-    r.querySelector(".pill").textContent=dName(new Date(ny,nmo-1,g.day));
-    r.lastChild.textContent=peso2(g.amt-credit);
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
+    r.querySelector("strong").textContent=g.L;
+    r.querySelector(".t .small").textContent="Due "+dName(g.date)+" · "+g.items.join(", ")+(g.credit?` · ${peso(g.credit)} credit applied`:"");
+    r.lastChild.textContent=peso2(g.amt);
+    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"card",amount:Math.round(g.amt*100)/100,cat:"credit",note:g.L+" card payment",lender:g.L,month:g.dm});
     due.appendChild(r);
   });
   (config.bills||[]).forEach((b,bi)=>{ if(!b.dueDay) return;
@@ -349,8 +372,8 @@ function render(){
     if(b.paidMonth&&b.paidMonth>=mkey(due)) due=new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
     const r=document.createElement("div");r.className="item";
     r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
-    r.querySelector("strong").textContent=b.name; r.querySelector(".t .small").textContent="Bill · due "+dName(due); r.lastChild.textContent=peso2(b.amount);
-    r.querySelector(".paybtn").onclick=()=>openSheet({amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(due)});
+    r.querySelector("strong").textContent=b.name; r.querySelector(".t .small").textContent="Due "+dName(due)+" · Bill"; r.lastChild.textContent=peso2(b.amount);
+    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"bill",amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(due)});
     due.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first.push(r):due_list_rest.push(r);
   });
   due_list_first.forEach(r=>due.insertBefore(r,due.firstChild)); due_list_rest.forEach(r=>due.appendChild(r));
@@ -379,6 +402,8 @@ function render(){
     r.querySelector(".t span").textContent=e.note||catName(e.cat);
     r.querySelector(".t .small").textContent=catName(e.cat)+" · "+dName(new Date(e.date+"T00:00"));
     r.querySelector("strong").textContent=peso2(e.amount);
+    const tt=r.querySelector(".t"); tt.classList.add("tap"); tt.setAttribute("role","button"); tt.tabIndex=0;
+    tt.onclick=()=>openSheet({kind:"edit",entry:e,amount:e.amount,cat:e.cat,note:e.note,date:e.date});
     r.querySelector("button").onclick=async()=>{
       const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget and your Google Sheet.");
       if(!ok) return;
@@ -432,11 +457,16 @@ function renderDebts(){
   $("debtTotal").textContent=peso2(total);
   $("debtFree").textContent=`Installment-free after ${mName(last,true)} · ${peso2(instMonth(m))} due this month`;
   const c=config.card, cc=$("cardCard");
-  if(c){cc.innerHTML=`<div class="row"><h2></h2><span class="pill warn">Carried over</span></div>
-   <div class="row"><span>Unpaid from last statement</span><strong>${peso2(c.carryover)}</strong></div>
+  if(c){const paidOff=c.paidOff||0, rem=Math.max(0,c.carryover-paidOff), pct=c.carryover?Math.min(1,paidOff/c.carryover):1;
+   cc.innerHTML=`<div class="row"><h2></h2><span class="pill ${rem?"warn":"good"}">${rem?"Paying off":"Cleared"}</span></div>
+   <div class="row"><span>Carried-over balance left</span><strong class="bigish">${peso2(rem)}</strong></div>
+   <div class="bar ${rem?"":"good"}"><span style="width:${(pct*100).toFixed(1)}%"></span></div>
+   <div class="row small muted"><span>${peso2(paidOff)} paid of ${peso2(c.carryover)}</span><span>${Math.round(pct*100)}%</span></div>
    <div class="row small muted"><span>Last finance charge</span><span>${peso2(c.financeCharge||0)}</span></div>
-   <div class="row small muted"><span>Balance in app</span><span>${peso2(c.balance||0)}</span></div>
-   <div class="small muted">${c.note||""}</div>`;cc.querySelector("h2").textContent=c.name+" card";}
+   <div class="small muted">${c.note||""}</div>
+   ${rem?'<button class="primary" type="button" id="carryBtn">Log a carryover payment</button>':""}`;
+   cc.querySelector("h2").textContent=c.name+" carryover";
+   const cb=$("carryBtn"); if(cb) cb.onclick=()=>openSheet({kind:"carry",cat:"credit",note:c.name+" carryover",amount:""});}
 }
 
 function renderSettings(){
@@ -461,12 +491,21 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   const v=parseFloat($("amt").value.replace(/,/g,""));
   if(!(v>0)){toast("Enter an amount");return}
   const btn=$("addBtn");btn.disabled=true;
-  const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:$("dt").value,cat:selCat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80),ts:new Date().toISOString()};
-  expenses=[...expenses,exp]; render(); closeSheet();
-  const bc=billCtx; billCtx=null;
+  const c=ctx, vals={date:$("dt").value,cat:selCat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80)};
+  if(c&&c.kind==="edit"){
+    const upd={...c.entry,...vals}; const before=expenses;
+    expenses=expenses.map(x=>x.id===upd.id?upd:x); render(); closeSheet();
+    try{await call("delete",{id:upd.id});await call("add",{expense:upd});toast("Updated")}
+    catch(e){expenses=before;render();toast("Couldn't save. Check your connection.");load()}
+    btn.disabled=false; return;
+  }
+  const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...vals,ts:new Date().toISOString()};
+  expenses=[...expenses,exp]; render(); closeSheet(); $("amt").value="";$("note").value="";
   try{await call("add",{expense:exp});
-    if(bc){const bills=config.bills.map((x,i)=>i===bc.bill?{...x,paidMonth:bc.month}:x);await call("setConfig",{patch:{bills}});}
-    $("amt").value="";$("note").value="";toast("Logged "+peso2(v));}
+    if(c&&c.kind==="bill"){const bills=config.bills.map((x,i)=>i===c.bill?{...x,paidMonth:c.month}:x);await call("setConfig",{patch:{bills}});}
+    if(c&&c.kind==="card"){await call("setConfig",{patch:{paidCards:{...(config.paidCards||{}),[c.lender]:c.month}}});}
+    if(c&&c.kind==="carry"){await call("setConfig",{patch:{card:{...config.card,paidOff:Math.round(((config.card.paidOff||0)+vals.amount)*100)/100}}});}
+    toast("Logged "+peso2(v));}
   catch(e){expenses=expenses.filter(x=>x.id!==exp.id);render();toast("Couldn't save. Check your connection.")}
   btn.disabled=false;
 };
@@ -476,11 +515,23 @@ document.querySelectorAll("nav .tab").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.v); window.scrollTo(0,0);
 });
 $("dt").value=ymd(new Date());
-let billCtx=null;
-function openSheet(pre){billCtx=pre&&pre.bill!=null?pre:null;$("dt").value=ymd(new Date());
-  if(pre&&pre.amount){$("amt").value=pre.amount;$("note").value=pre.note||"";selCat=pre.cat;document.querySelectorAll("#catChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===pre.cat));}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
-function closeSheet(){if(billCtx){billCtx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
-$("fab").onclick=()=>openSheet(); $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
+let ctx=null;
+function pickCat(id){selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===id))}
+function buildQuick(){const q=$("quick");q.textContent="";
+  const counts={};expenses.filter(e=>e.note&&!/estimated/i.test(e.note)&&e.cat!=="utilities"&&e.cat!=="credit").forEach(e=>{const k=e.cat+"|"+e.note.toLowerCase();const c=counts[k]||(counts[k]={note:e.note,cat:e.cat,n:0,amount:e.amount,ts:""});c.n++;if((e.date+e.ts)>c.ts){c.ts=e.date+e.ts;c.amount=e.amount}});
+  const learned=Object.values(counts).filter(c=>c.n>=2).sort((a,b)=>b.n-a.n).slice(0,4);
+  const defs=[{note:"Grab",cat:"transport"},{note:"Cigarettes",cat:"personal"},{note:"Lunch",cat:"foodout"},{note:"Drinking water",cat:"household"}];
+  const list=[...learned,...defs.filter(d=>!learned.some(l=>l.note.toLowerCase()===d.note.toLowerCase()))].slice(0,6);
+  list.forEach(x=>{const b=document.createElement("button");b.type="button";b.className="quick";b.textContent=x.amount?`${x.note} · ${peso(x.amount)}`:x.note;
+    b.onclick=()=>{$("note").value=x.note;pickCat(x.cat);if(x.amount)$("amt").value=x.amount;$("amt").focus()};q.appendChild(b)});}
+function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(new Date());
+  $("sheetTitle").textContent=pre&&pre.kind==="edit"?"Edit expense":pre&&pre.kind==="carry"?"Log carryover payment":"Log spending";
+  $("addBtn").textContent=pre&&pre.kind==="edit"?"Save changes":"Save";
+  $("quick").hidden=!!pre; if(!pre) buildQuick();
+  if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";pickCat(pre.cat);}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
+function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
+$("fab").onclick=()=>openSheet();
+$("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
 function confirmBox(title,text){return new Promise(res=>{
