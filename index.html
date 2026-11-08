@@ -37,8 +37,15 @@ body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-varia
 main{max-width:520px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom));display:grid;gap:14px}
 h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.02em}
 h1{font-size:26px;font-weight:800;min-height:34px;cursor:pointer}
-#brandText{display:inline-block;transition:opacity .35s ease,transform .35s ease}
-#brandText.out{opacity:0;transform:translateY(-6px)}
+main>*{min-width:0}
+header.row>div:first-child{flex:1;min-width:0}
+#brand{overflow:hidden;white-space:nowrap;line-height:34px}
+#brand.fade{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 28px),transparent)}
+#brand.fade.both{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 28px),transparent)}
+#brandText.marq{animation:marq var(--t,6s) ease-in-out .9s 1 both}
+@keyframes marq{0%,8%{transform:translateX(0)}88%,100%{transform:translateX(var(--d,0))}}
+#brandText{display:inline-block;white-space:nowrap;transition:opacity .35s ease}
+#brandText.out{opacity:0}
 #brandText.greet{font-size:20px;font-weight:700;letter-spacing:-.01em}
 #brandText.brand{letter-spacing:-.04em}
 #brandText.brand::after{content:".";color:var(--accent)}
@@ -851,8 +858,17 @@ function pickGreeting(){
 }
 let greetTimer=null;
 function greet(){
-  const el=$("brandText"); clearTimeout(greetTimer);
-  const swap=(txt,cls,next)=>{el.classList.add("out");setTimeout(()=>{el.textContent=txt;el.className=cls+" out";requestAnimationFrame(()=>el.classList.remove("out"));if(next)greetTimer=setTimeout(next,4500)},350)};
+  const el=$("brandText"), box=$("brand"); clearTimeout(greetTimer);
+  const reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const swap=(txt,cls,next)=>{el.classList.add("out");setTimeout(()=>{
+    el.textContent=txt;el.className=cls+" out";box.classList.remove("fade","both");el.style.removeProperty("--d");el.style.removeProperty("--t");
+    requestAnimationFrame(()=>{el.classList.remove("out");
+      const over=el.scrollWidth-box.clientWidth; let hold=4500;
+      if(over>2){box.classList.add("fade");
+        if(!reduce){const d=over+30, t=Math.max(3,d/45); el.style.setProperty("--d",-d+"px");el.style.setProperty("--t",t+"s");
+          void el.offsetWidth; el.classList.add("marq"); setTimeout(()=>box.classList.add("both"),900); hold=Math.max(4500,(t+0.9)*1000+1800);}}
+      if(next)greetTimer=setTimeout(next,hold);});
+  },350)};
   swap(pickGreeting(),"greet",()=>swap("bujjet","brand"));
 }
 $("brand").onclick=greet; $("brand").onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();greet()}};
