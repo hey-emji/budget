@@ -291,7 +291,7 @@ function render(){
   $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
 
   // due list
-  const due=$("dueList"); due.textContent="";
+  const due=$("dueList"); due.textContent=""; const due_list_first=[],due_list_rest=[];
   const groups={}; config.debts.forEach(d=>{if(!debtActive(d,m))return;(groups[d.lender]=groups[d.lender]||{lender:d.lender,day:d.dueDay,amt:0,items:[]});groups[d.lender].amt+=d.monthly;groups[d.lender].items.push(d.name)});
   const nm=mAdd(m,1),[ny,nmo]=nm.split("-").map(Number);
   Object.values(groups).sort((a,b)=>a.day-b.day).forEach(g=>{
@@ -304,6 +304,14 @@ function render(){
     r.lastChild.textContent=peso2(g.amt-credit);
     due.appendChild(r);
   });
+  (config.bills||[]).filter(b=>b.dueDay).forEach(b=>{
+    const due=now.getDate()<=b.dueDay?new Date(now.getFullYear(),now.getMonth(),b.dueDay):new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
+    const r=document.createElement("div");r.className="item";
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted">Bill</span></div><span class="pill info"></span><strong></strong>';
+    r.querySelector("strong").textContent=b.name; r.querySelector(".pill").textContent=dName(due); r.lastChild.textContent=peso2(b.amount);
+    due.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first.push(r):due_list_rest.push(r);
+  });
+  due_list_first.forEach(r=>due.insertBefore(r,due.firstChild)); due_list_rest.forEach(r=>due.appendChild(r));
   if(config.card && config.card.carryover>0){
     const r=document.createElement("div");r.className="item";
     r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill warn">Extra</span><strong></strong>';
@@ -339,7 +347,7 @@ function renderPaydays(){
   <table><tbody>
    <tr><td>Pay</td><td class="n">${peso2(p.income)}${p.actual?"":' <span class="small muted">(expected)</span>'}</td></tr>
    <tr><td>Installments (half of month)</td><td class="n">−${peso2(p.inst)}</td></tr>
-   <tr><td>Bills (electricity, water, HOA)</td><td class="n">−${peso2(p.bills)}</td></tr>
+   <tr><td>Bills (utilities, HOA, wifi)</td><td class="n">−${peso2(p.bills)}</td></tr>
    <tr><td>Living money + subscriptions</td><td class="n">−${peso2(p.living)}</td></tr>
    <tr><td>Cigarette envelope</td><td class="n">−${peso2(p.cig)}</td></tr>
    ${p.cuts.map(c=>`<tr><td>Cut: ${c.name}</td><td class="n">+${peso2(c.amount)}</td></tr>`).join("")}
