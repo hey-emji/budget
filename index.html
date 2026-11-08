@@ -232,7 +232,7 @@ function plan(date){
   const cig=cigCap(m)/2;
   const left=income-inst-bills-living-cig;
   const half=id=>id==="cigarettes"?cig:(config.spend.find(s=>s.id===id)?.amount||0)/2;
-  const names={foodout:"Dine-out",misc:"Misc",cigarettes:"Cigarettes",groceries:"Groceries"};
+  const names={foodout:"Dining Out",misc:"Personal & Household",cigarettes:"Tobacco",groceries:"Food"};
   const cuts=[]; let short=left<0?-left:0;
   for(const id of ["foodout","misc","cigarettes","groceries"]){ if(short<=0) break; const c=Math.min(half(id),short); if(c>0){cuts.push({id,name:names[id],amount:c}); short-=c;} }
   return {date,key,m,income,actual:paydays[key]?.income!=null,inst,bills,living,cig,left,cuts,uncovered:short,final:left<0?-short:left};
@@ -244,14 +244,14 @@ function upcomingPaydays(n){
   return out;
 }
 function budgetsFor(m){
-  return [...config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount})),{id:"cigarettes",name:"Cigarettes",amount:cigCap(m)}];
+  return [...config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount})),{id:"cigarettes",name:"Tobacco",amount:cigCap(m)}];
 }
 function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate(),ld=lastDay(y,mo);
   let start; if(d>=Math.min(30,ld)) start=payDate(y,mo,2); else if(d>=15) start=payDate(y,mo,1); else {const py=mo===0?y-1:y,pm=mo===0?11:mo-1;start=payDate(py,pm,2)}
   const sy=start.getFullYear(),sm=start.getMonth(); let end;
   if(start.getDate()===15) end=payDate(sy,sm,2); else end=sm===11?payDate(sy+1,0,1):payDate(sy,sm+1,1);
   return {start,end};}
-const CATS=()=>[...budgetsFor(mkey(now)).map(b=>({id:b.id,name:b.name})),{id:"other",name:"Other"}];
+const CATS=()=>[...budgetsFor(mkey(now)).map(b=>({id:b.id,name:b.name})),{id:"utilities",name:"Bills & Utilities"},{id:"credit",name:"Credit Card & Loans"},{id:"other",name:"Other"}];
 
 /* ---------- render ---------- */
 function render(){
@@ -283,6 +283,8 @@ function render(){
   });
   const other=sum(mine.filter(e=>e.cat==="other"),e=>e.amount);
   if(other){const p=document.createElement("div");p.className="row small";p.innerHTML='<span>Other (not budgeted)</span><strong></strong>';p.querySelector("strong").textContent=peso(other);box.appendChild(p)}
+  const paid=sum(mine.filter(e=>e.cat==="utilities"||e.cat==="credit"),e=>e.amount);
+  if(paid){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Bills and card payments (from set-asides)</span><strong></strong>';p.querySelector("strong").textContent=peso(paid);box.appendChild(p)}
   const left=totB-totS-other;
   $("heroLeft").textContent=peso(left);
   const daysLeft=Math.max(1,Math.round((per.end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
