@@ -272,10 +272,10 @@ function plan(date){
   const income=paydays[key]?.income ?? config.incomePerPayday;
   const inst=(instMonth(m)-creditMonth(m))/2;
   const bills=sum(config.bills,b=>b.amount)/2;
-  const living=(sum(config.spend,s=>s.amount)+sum(config.subs,s=>s.amount))/2;
+  const living=(sum(spendFor(date),s=>s.amount)+sum(config.subs,s=>s.amount))/2;
   const cig=cigCap(m)/2;
   const left=income-inst-bills-living-cig;
-  const half=id=>(config.spend.find(s=>s.id===id)?.amount||0)/2+(id==="personal"?cig:0);
+  const half=id=>(spendFor(date).find(s=>s.id===id)?.amount||0)/2+(id==="personal"?cig:0);
   const names={foodout:"Dining Out",personal:"Personal",household:"Household",groceries:"Food & Groceries"};
   const cuts=[]; let short=left<0?-left:0;
   for(const id of ["foodout","personal","household","groceries"]){ if(short<=0) break; const c=Math.min(half(id),short); if(c>0){cuts.push({id,name:names[id],amount:c}); short-=c;} }
@@ -287,8 +287,9 @@ function upcomingPaydays(n){
   while(out.length<n){const d=payDate(y,mo,half);if(d>=today)out.push(d);if(half===1)half=2;else{half=1;mo++;if(mo>11){mo=0;y++}}}
   return out;
 }
-function budgetsFor(m){
-  return config.spend.map(s=>({id:s.id,name:s.name,amount:s.amount+(s.id==="personal"?cigCap(m):0)}));
+function spendFor(d){const k=typeof d==="string"?d:ymd(d);let sp=config.spend;[...(config.spendFrom||[])].sort((a,b)=>a.from<b.from?-1:1).forEach(x=>{if(x.from<=k)sp=x.spend});return sp}
+function budgetsFor(d){const m=mkey(d);
+  return spendFor(d).map(s=>({id:s.id,name:s.name,amount:s.amount+(s.id==="personal"?cigCap(m):0)}));
 }
 function periodAt(off){let p=periodNow();for(let i=0;i<off;i++){const st=p.start,y=st.getFullYear(),mo=st.getMonth();
   const ps=st.getDate()===15?(mo===0?payDate(y-1,11,2):payDate(y,mo-1,2)):payDate(y,mo,1);p={start:ps,end:st};}return p}
@@ -298,7 +299,7 @@ function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate()
   const sy=start.getFullYear(),sm=start.getMonth(); let end;
   if(start.getDate()===15) end=payDate(sy,sm,2); else end=sm===11?payDate(sy+1,0,1):payDate(sy,sm+1,1);
   return {start,end};}
-const CATS=()=>[...budgetsFor(mkey(now)).map(b=>({id:b.id,name:b.name})),{id:"utilities",name:"Bills & Utilities"},{id:"credit",name:"Credit Card & Loans"},{id:"other",name:"Other"}];
+const CATS=()=>[...budgetsFor(now).map(b=>({id:b.id,name:b.name})),{id:"utilities",name:"Bills & Utilities"},{id:"credit",name:"Credit Card & Loans"},{id:"other",name:"Other"}];
 
 /* ---------- render ---------- */
 function render(){
@@ -317,13 +318,13 @@ function render(){
   // month spend
   const mine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE);
   const pp=plan(per.start); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
-  const budgets=budgetsFor(mkey(per.start)).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
+  const budgets=budgetsFor(per.start).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
   const cn=$("cutNote"); if(pp.cuts.length){cn.hidden=false;cn.textContent=`Pay on ${dName(per.start)} was ${peso(config.incomePerPayday-pp.income)} lower, so this period's budget was cut: `+pp.cuts.map(c=>`${c.name} −${peso(c.amount)}`).join(", ")+(pp.uncovered>0?`. Still short ${peso(pp.uncovered)}: cover it from cash on hand.`:".");} else cn.hidden=true;
   let totB=0,totS=0; const box=$("cats"); box.textContent="";
   budgets.forEach(b=>{
     const spent=sum(mine.filter(e=>e.cat===b.id),e=>e.amount); totB+=b.amount; totS+=spent;
     const el=document.createElement("div"); el.className="cat";
-    if((config.spend.find(x=>x.id===b.id)||{}).amount===0){
+    if((spendFor(per.start).find(x=>x.id===b.id)||{}).amount===0){
       el.innerHTML='<div class="row"><strong></strong><span class="pill info">No set budget</span></div><div class="row small muted"><span></span><span>logged as needed</span></div>';
       el.querySelector("strong").textContent=b.name; el.querySelector(".row.small span").textContent=peso(spent)+" spent";
       box.appendChild(el); return;
@@ -341,8 +342,8 @@ function render(){
   if(paid){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Bills and card payments (from set-asides)</span><strong></strong>';p.querySelector("strong").textContent=peso(paid);box.appendChild(p)}
   let left=totB-totS-other;
   if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.start);
-    const cb=budgetsFor(mkey(cp.start)).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
-    totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(mkey(cp.start)).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
+    const cb=budgetsFor(cp.start).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
+    totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(cp.start).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
   $("heroLeft").textContent=peso(left);
   const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
   $("heroSub").textContent=`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
@@ -473,17 +474,21 @@ function renderSettings(){
   const f=$("setFields"); if(f.dataset.built) return; f.dataset.built=1;
   const add=(id,label,val)=>{const w=document.createElement("div");w.innerHTML=`<label class="small muted" for="${id}"></label><input id="${id}" inputmode="decimal">`;w.querySelector("label").textContent=label;w.querySelector("input").value=val;f.appendChild(w)};
   add("s-income","Pay per payday (₱)",config.incomePerPayday);
-  config.spend.forEach(s=>add("s-"+s.id,s.name+" per month (₱)",s.amount));
-  const m=mkey(now); add("s-cig","Vices cap for "+mName(m,true)+", part of Personal (₱)",cigCap(m));
+  const nx=periodAt(0).end; f.dataset.from=ymd(nx);
+  const note=document.createElement("div");note.className="small muted";note.textContent="Changes start with your next pay period ("+dName(nx)+"), so they don't change what's left right now.";f.appendChild(note);
+  spendFor("9999-12-31").forEach(s=>add("s-"+s.id,s.name+" per month (₱)",s.amount));
+  const m=mkey(nx); add("s-cig","Vices cap for "+mName(m,true)+", part of Personal (₱)",cigCap(m));
 }
 $("setForm").onsubmit=async ev=>{ev.preventDefault();
   const num=id=>{const v=parseFloat(String($(id).value).replace(/,/g,""));return v>=0?v:null};
   const inc=num("s-income"); if(inc==null){toast("Check the pay amount");return}
-  const spend=config.spend.map(s=>({...s,amount:num("s-"+s.id)??s.amount}));
-  const m=mkey(now), cv=num("s-cig");
+  const from=$("setFields").dataset.from;
+  const spend=spendFor("9999-12-31").map(s=>({...s,amount:num("s-"+s.id)??s.amount}));
+  const spendFrom=[...(config.spendFrom||[]).filter(x=>x.from!==from),{from,spend}];
+  const m=from.slice(0,7), cv=num("s-cig");
   let cig=(config.cigPlan||[]).map(x=>({...x}));
   if(cv!=null){const i=cig.findIndex(x=>x.month===m); if(i>=0) cig[i].cap=cv; else cig.push({month:m,cap:cv});}
-  try{await call("setConfig",{patch:{incomePerPayday:inc,spend,cigPlan:cig}});toast("Budget saved")}catch(e){toast("Couldn't save. Try again.")}
+  try{await call("setConfig",{patch:{incomePerPayday:inc,spendFrom,cigPlan:cig}});toast("Saved. Starts "+dName(new Date(from+"T00:00")))}catch(e){toast("Couldn't save. Try again.")}
 };
 
 $("addForm").onsubmit=async ev=>{ev.preventDefault();
