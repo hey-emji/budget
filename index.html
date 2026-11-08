@@ -111,6 +111,9 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
+.updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
+#upDlg{z-index:29}#upBack{z-index:28}
+.upmonth{padding:10px 0 2px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .pos{color:var(--good)}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
 .seg button{border:none;background:none;color:var(--muted);padding:9px 6px;border-radius:9px;font:600 13px var(--body);cursor:pointer}
@@ -219,8 +222,9 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
       </div>
 
       <div class="card">
-        <h2>Upcoming Payments</h2>
+        <div class="row"><h2>Upcoming Payments</h2><span class="small muted" id="dueTitleCount"></span></div>
         <div id="dueList" class="list"></div>
+        <button class="secondary" type="button" id="upMore" hidden>Show all upcoming</button>
       </div>
 
     </div>
@@ -305,6 +309,11 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
   <label class="amount" for="edAmt"><span>₱</span><input id="edAmt" inputmode="decimal"></label>
   <button class="ghost" type="button" id="edFull" style="justify-self:start"></button>
   <div class="inline"><button class="secondary" type="button" id="edNo">Cancel</button><button class="primary" type="button" id="edYes">Save</button></div>
+</div>
+<div class="backdrop" id="upBack" hidden></div>
+<div class="dialog updlg" id="upDlg" role="dialog" aria-modal="true" aria-labelledby="upTitle" hidden>
+  <div class="row"><h2 id="upTitle">All upcoming payments</h2><button class="ghost" type="button" id="upClose">Close</button></div>
+  <div class="list" id="upAll"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -514,49 +523,41 @@ function render(){
   $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
 
   // due list
-  const due=$("dueList"); due.textContent=""; const due_list_first=[],due_list_rest=[];
-  const paidCards=config.paidCards||{}, nm=mAdd(m,1),[ny,nmo]=nm.split("-").map(Number);
-  [...new Set(config.debts.map(d=>d.lender))].map(L=>{
+  const due=$("dueList"); due.textContent=""; const ups=[];
+  const paidCards=config.paidCards||{};
+  const mkRow=(title,sub,amt,onPay,pill)=>{const r=document.createElement("div");r.className="item";
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div>'+(onPay?'<button class="paybtn" type="button">Mark paid</button>':`<span class="pill warn">${pill||""}</span>`)+'<strong></strong>';
+    r.querySelector("strong").textContent=title; r.querySelector(".t .small").textContent=sub; r.lastChild.textContent=peso2(amt);
+    if(onPay) r.querySelector(".paybtn").onclick=()=>{closeUpcoming();onPay()}; return r};
+  [...new Set(config.debts.map(d=>d.lender))].forEach(L=>{
     const mm=firstUnpaid(L,paidCards,config.credits||[]), dm=mAdd(mm,1);
-    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)); if(!ds.length) return null;
-    const credit=sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount);
-    const [dy,dmo]=dm.split("-").map(Number);
-    return {L,items:ds.map(d=>d.name),amt:sum(ds,d=>d.monthly)-credit,credit,date:new Date(dy,dmo-1,ds[0].dueDay),dm};
-  }).filter(Boolean).sort((a,b)=>a.date-b.date).forEach(g=>{
-    const r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
-    r.querySelector("strong").textContent=g.L;
-    r.querySelector(".t .small").textContent="Due "+dName(g.date)+" · "+g.items.join(", ")+(g.credit?` · ${peso(g.credit)} credit applied`:"");
-    r.lastChild.textContent=peso2(g.amt);
-    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"card",mode:"xfer",to:"to-"+({Unionbank:"unionbankcc",Metrobank:"metrobank"}[g.L]||g.L.toLowerCase()),acct:"maribank",amount:Math.round(g.amt*100)/100,note:g.L+" card payment",lender:g.L,month:g.dm});
-    due.appendChild(r);
+    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)); if(!ds.length) return;
+    const credit=sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount), amt=sum(ds,d=>d.monthly)-credit;
+    const [dy,dmo]=dm.split("-").map(Number), date=new Date(dy,dmo-1,ds[0].dueDay);
+    ups.push({date,make:()=>mkRow(L+" card","Due "+dName(date)+" · "+ds.map(d=>d.name).join(", ")+(credit?` · ${peso(credit)} credit applied`:""),amt,
+      ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+({Unionbank:"unionbankcc",Metrobank:"metrobank"}[L]||L.toLowerCase()),acct:"maribank",amount:Math.round(amt*100)/100,note:L+" card payment",lender:L,month:dm}))});
   });
   (config.cards||[]).filter(c=>c.statement&&c.statementDue&&c.paidStmt!==c.statementDue).forEach(c=>{
-    const d=new Date(c.statementDue+"T00:00"), r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
-    r.querySelector("strong").textContent=c.name; r.querySelector(".t .small").textContent="Due "+dName(d)+" · statement · min "+peso(c.minDue||0);
-    r.lastChild.textContent=peso2(c.statement);
-    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"stmt",mode:"xfer",to:"to-"+c.id,acct:"maribank",amount:c.statement,note:c.name+" payment",card:c.id});
-    (d.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first:due_list_rest).push(r);
+    const date=new Date(c.statementDue+"T00:00");
+    ups.push({date,make:()=>mkRow(c.name,"Due "+dName(date)+" · statement · min "+peso(c.minDue||0),c.statement,
+      ()=>openSheet({kind:"stmt",mode:"xfer",to:"to-"+c.id,acct:"maribank",amount:c.statement,note:c.name+" payment",card:c.id}))});
   });
   (config.bills||[]).forEach((b,bi)=>{ if(!b.dueDay) return;
-    let due=new Date(now.getFullYear(),now.getMonth(),b.dueDay);
-    if(b.paidMonth&&b.paidMonth>=mkey(due)) due=new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
-    const r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
-    r.querySelector("strong").textContent=b.name; r.querySelector(".t .small").textContent="Due "+dName(due)+" · Bill"; r.lastChild.textContent=peso2(b.amount);
-    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"bill",amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(due)});
-    due.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first.push(r):due_list_rest.push(r);
+    let date=new Date(now.getFullYear(),now.getMonth(),b.dueDay);
+    if(b.paidMonth&&b.paidMonth>=mkey(date)) date=new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
+    ups.push({date,make:()=>mkRow(b.name,"Due "+dName(date)+" · Bill",b.amount,()=>openSheet({kind:"bill",amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(date)}))});
   });
-  due_list_first.forEach(r=>due.insertBefore(r,due.firstChild)); due_list_rest.forEach(r=>due.appendChild(r));
-  if(config.card && config.card.carryover-(config.card.paidOff||0)>0.01){
-    const r=document.createElement("div");r.className="item";
-    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill warn">Extra</span><strong></strong>';
-    r.querySelector("strong").textContent=config.card.name+" carried-over balance";
-    r.querySelector(".t .small").textContent="Not in the plan yet · gets finance charges monthly";
-    r.lastChild.textContent=peso2(config.card.carryover-(config.card.paidOff||0));
-    due.appendChild(r);
-  }
+  ups.sort((x,y)=>x.date-y.date);
+  const thisMonth=ups.filter(u=>u.date.getFullYear()===now.getFullYear()&&u.date.getMonth()===now.getMonth());
+  let show=thisMonth.slice(0,3); if(show.length===3){const last=show[2].date.getTime(); show=thisMonth.filter((u,i)=>i<3||u.date.getTime()===last);}
+  if(!show.length){const e=document.createElement("div");e.className="small muted";e.style.padding="6px 0";e.textContent="Nothing due this month.";due.appendChild(e);}
+  show.forEach(u=>due.appendChild(u.make()));
+  const more=ups.length-show.length, mb=$("upMore");
+  mb.hidden=!more; mb.textContent=`Show all upcoming (${ups.length})`;
+  mb.onclick=()=>{const l=$("upAll");l.textContent="";
+    let lastM=""; ups.forEach(u=>{const mk=mkey(u.date); if(mk!==lastM){lastM=mk;const h=document.createElement("div");h.className="small muted upmonth";h.textContent=mName(mk,true);l.appendChild(h)} l.appendChild(u.make())});
+    $("upBack").hidden=false;$("upDlg").hidden=false;};
+  $("dueTitleCount").textContent=thisMonth.length?`${thisMonth.length} this month`:"";
 
   // entries
   const list=$("entries"); list.textContent="";
@@ -836,8 +837,10 @@ function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(n
   const pm=pre&&pre.mode?pre.mode:pre&&pre.cat&&String(pre.cat).startsWith("inc-")?"inc":pre&&(pre.cat==="transfer"||(pre.cat==="credit"&&pre.ref))?"xfer":"exp";
   setMode(pm,pm==="xfer"?(pre.ref?"to-"+pre.ref:pre.to):pre&&pre.cat,pre&&pre.acct);
   if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
+function closeUpcoming(){$("upDlg").hidden=true;$("upBack").hidden=true}
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
+$("upClose").onclick=closeUpcoming; $("upBack").onclick=closeUpcoming;
 $("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")}; $("mXfer").onclick=()=>{if(!ctx)setMode("xfer")};
 $("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
