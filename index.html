@@ -107,6 +107,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pos{color:var(--good)}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
 .seg button{border:none;background:none;color:var(--muted);padding:9px 6px;border-radius:9px;font:600 13px var(--body);cursor:pointer}
+.seg3{grid-template-columns:1fr 1fr 1fr}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .edit{background:none;border:none;color:var(--muted);padding:4px;margin-left:4px;vertical-align:middle;cursor:pointer}
 .edit svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linejoin:round}
@@ -233,6 +234,8 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
   <!-- DEBTS -->
   <section class="view" id="v-debts" hidden>
     <div style="display:grid;gap:14px">
+      <div class="card" id="savingsCard"></div>
+      <div class="card" id="ccCard"></div>
       <div class="card hero">
         <span class="eyebrow muted">Installments left to pay</span>
         <div class="big" id="debtTotal">—</div>
@@ -260,17 +263,21 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
   <button class="tab" data-v="today" aria-current="page"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Today</button>
   <button class="tab" data-v="paydays"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Paydays</button>
   <button class="fab" id="fab" type="button" aria-label="Log spending"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-  <button class="tab" data-v="debts"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Debts</button>
+  <button class="tab" data-v="debts"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Accounts</button>
   <button class="tab" data-v="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Budget</button>
 </div></nav>
 <div class="backdrop" id="backdrop" hidden></div>
 <form class="sheet" id="addForm" autocomplete="off" hidden aria-label="Log spending">
   <div class="grab"></div>
   <div class="row"><h2 id="sheetTitle">Log spending</h2><button class="ghost" type="button" id="closeSheet">Cancel</button></div>
-  <div class="seg" role="group" aria-label="Entry type"><button type="button" id="mExp" aria-pressed="true">Expense</button><button type="button" id="mInc" aria-pressed="false">Income</button></div>
+  <div class="seg seg3" role="group" aria-label="Entry type"><button type="button" id="mExp" aria-pressed="true">Expense</button><button type="button" id="mInc" aria-pressed="false">Income</button><button type="button" id="mXfer" aria-pressed="false">Transfer</button></div>
   <div class="quickrow" id="quick" aria-label="Quick add"></div>
   <label class="amount" for="amt"><span>₱</span><input id="amt" inputmode="decimal" placeholder="0" required></label>
+  <div class="small muted" id="catLabel">Category</div>
   <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+  <div class="small muted" id="acctLabel">Paid with</div>
+  <div class="chips" id="acctChips" role="group" aria-label="Account"></div>
+  <div class="small muted" id="xferNote" hidden>Transfers move money between your pay, savings and cards. They never count as spending.</div>
   <div class="small muted" id="incNote" hidden>Extra income goes to your Maribank savings. It doesn't change your spending budget. Your salary is added automatically from the Paydays tab.</div>
   <div class="inline">
     <div><label class="small muted" for="note">Note</label><input id="note" placeholder="lunch, 1 pack…"></div>
@@ -362,25 +369,51 @@ function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate()
   return {start,end};}
 const INC=[{id:"inc-side",name:"Side income"},{id:"inc-refund",name:"Refund"},{id:"inc-gift",name:"Gift"},{id:"inc-bonus",name:"Bonus / 13th month"},{id:"inc-other",name:"Other income"}];
 const isInc=e=>String(e.cat).startsWith("inc-");
-let sheetMode="exp";
-function setMode(mode,keepCat){sheetMode=mode; const chips=$("catChips"); chips.textContent="";
-  const list=mode==="inc"?INC:CATS();
+const PAYW=[{id:"cash",name:"Cash / debit"},{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"},{id:"maya",name:"Maya CC"},{id:"maribankcc",name:"Maribank CC"},{id:"metrobank",name:"Metrobank CC"},{id:"unionbankcc",name:"Unionbank CC"}];
+const GOES=[{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"},{id:"cash",name:"Cash / wallet"}];
+const XFROM=[{id:"cash",name:"Pay / cash"},{id:"maribank",name:"Maribank"},{id:"unionbank",name:"Unionbank"}];
+const XTO=()=>[{id:"to-maribank",name:"Maribank savings"},{id:"to-unionbank",name:"Unionbank savings"},...(config&&config.cards||[]).map(c=>({id:"to-"+c.id,name:c.short||c.name}))];
+const acctName=id=>([...PAYW,...GOES,...XFROM].find(a=>a.id===id)||{name:id}).name;
+const isXfer=e=>e.cat==="transfer";
+let sheetMode="exp", selAcct="cash";
+const acctNameCard=id=>((config&&config.cards||[]).find(c=>c.id===id)||{name:acctName(id)}).name;
+function balances(){
+  const out={};
+  (config.accounts||[]).forEach(a=>{const ok=e=>String(e.date)>=a.startDate&&(e.ts||"")>=(a.startTs||"");
+    const inn=sum(expenses.filter(e=>ok(e)&&((isInc(e)&&(e.acct||"maribank")===a.id)||(e.ref===a.id&&(isXfer(e))))),e=>e.amount);
+    const outA=sum(expenses.filter(e=>ok(e)&&!isInc(e)&&e.acct===a.id),e=>e.amount);
+    out[a.id]={...a,bal:a.start+inn-outA,inn,outA};});
+  (config.cards||[]).filter(c=>c.start!=null).forEach(c=>{const ok=e=>String(e.date)>=c.startDate;
+    const buys=sum(expenses.filter(e=>ok(e)&&!isInc(e)&&e.cat!=="credit"&&e.cat!=="transfer"&&e.acct===c.id),e=>e.amount);
+    const paid=sum(expenses.filter(e=>ok(e)&&e.cat==="credit"&&e.ref===c.id),e=>e.amount);
+    out[c.id]={...c,owed:c.start+buys-paid,buys,paid};});
+  return out;}
+function pickAcct(id){selAcct=id;document.querySelectorAll("#acctChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===id))}
+function setMode(mode,keepCat,keepAcct){sheetMode=mode; const chips=$("catChips"); chips.textContent="";
+  const list=mode==="inc"?INC:mode==="xfer"?XTO():CATS().filter(c=>c.id!=="credit");
+  const al=$("acctChips"); al.textContent=""; const alist=mode==="inc"?GOES:mode==="xfer"?XFROM:PAYW;
+  alist.forEach(a=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=a.name;b.dataset.id=a.id;b.onclick=()=>pickAcct(a.id);al.appendChild(b)});
+  pickAcct(keepAcct&&alist.some(a=>a.id===keepAcct)?keepAcct:alist[0].id);
+  $("acctLabel").textContent=mode==="inc"?"Goes to":mode==="xfer"?"From":"Paid with";
+  $("catLabel").textContent=mode==="xfer"?"To":"Category";
+  $("mXfer").setAttribute("aria-pressed",mode==="xfer");
   list.forEach(c=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c.name;b.dataset.id=c.id;b.onclick=()=>pickCat(c.id);chips.appendChild(b)});
   pickCat(keepCat&&list.some(c=>c.id===keepCat)?keepCat:list[0].id);
+  $("xferNote").hidden=mode!=="xfer";
   $("mExp").setAttribute("aria-pressed",mode==="exp"); $("mInc").setAttribute("aria-pressed",mode==="inc");
-  $("note").placeholder=mode==="inc"?"e.g. SM refund, freelance":"lunch, 1 pack…";
-  $("incNote").hidden=mode!=="inc"; $("quick").hidden=mode==="inc"||!!ctx;
-  if(!ctx) $("sheetTitle").textContent=mode==="inc"?"Log income":"Log spending";
+  $("note").placeholder=mode==="inc"?"e.g. from Ate, SM refund":mode==="xfer"?"e.g. Maya payment, savings":"lunch, 1 pack…";
+  $("incNote").hidden=mode!=="inc"; $("quick").hidden=mode!=="exp"||!!ctx;
+  if(!ctx) $("sheetTitle").textContent=mode==="inc"?"Log income":mode==="xfer"?"Move money":"Log spending";
 }
 function renderMoneyIn(per,incMine){
   const box=$("moneyIn"); if(!box) return; box.textContent="";
   const p=plan(per.start), extra=sum(incMine,e=>e.amount);
   const rows=[{name:"Salary · "+dName(per.start),sub:p.actual?"Pay received":"Expected pay",amt:p.income}];
-  [...incMine].sort((a,b)=>(b.date+b.ts).localeCompare(a.date+a.ts)).forEach(e=>rows.push({e,name:e.note||(INC.find(c=>c.id===e.cat)||{}).name,sub:(INC.find(c=>c.id===e.cat)||{name:"Income"}).name+" · "+dName(new Date(e.date+"T00:00"))+" · to Maribank",amt:e.amount}));
+  [...incMine].sort((a,b)=>(b.date+b.ts).localeCompare(a.date+a.ts)).forEach(e=>rows.push({e,name:e.note||(INC.find(c=>c.id===e.cat)||{}).name,sub:(INC.find(c=>c.id===e.cat)||{name:"Income"}).name+" · "+dName(new Date(e.date+"T00:00"))+" · to "+acctName(e.acct&&e.acct!=="cash"?e.acct:(e.acct==="cash"?"cash":"maribank")),amt:e.amount}));
   rows.forEach(r=>{const el=document.createElement("div");el.className="item";
     el.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong class="pos"></strong>'+(r.e?'<button class="del" type="button" aria-label="Delete income"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>':'<span></span>');
     el.querySelector(".t span").textContent=r.name; el.querySelector(".t .small").textContent=r.sub; el.querySelector("strong").textContent="+"+peso2(r.amt);
-    if(r.e){const tt=el.querySelector(".t");tt.classList.add("tap");tt.onclick=()=>openSheet({kind:"edit",entry:r.e,amount:r.e.amount,cat:r.e.cat,note:r.e.note,date:r.e.date});
+    if(r.e){const tt=el.querySelector(".t");tt.classList.add("tap");tt.onclick=()=>openSheet({kind:"edit",entry:r.e,amount:r.e.amount,cat:r.e.cat,note:r.e.note,date:r.e.date,acct:r.e.acct});
       el.querySelector(".del").onclick=async()=>{if(!await confirmBox(`Delete +${peso2(r.e.amount)}${r.e.note?" · "+r.e.note:""}?`,"This removes it from your income and your Google Sheet."))return;try{await call("delete",{id:r.e.id});toast("Deleted")}catch(x){toast("Couldn't delete. Try again.")}};}
     box.appendChild(el)});
   const t=$("incTotal"); t.querySelector("strong").textContent="+"+peso2(p.income+extra);
@@ -403,7 +436,7 @@ function render(){
   // chips
   if(!$("catChips").dataset.built){$("catChips").dataset.built=1; setMode("exp");}
   // month spend
-  const allMine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE), mine=allMine.filter(e=>!isInc(e)), incMine=allMine.filter(isInc);
+  const allMine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE), mine=allMine.filter(e=>!isInc(e)&&!isXfer(e)), incMine=allMine.filter(isInc);
   renderMoneyIn(per,incMine);
   const pp=plan(per.start); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
   const budgets=budgetsFor(per.start).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
@@ -453,8 +486,16 @@ function render(){
     r.querySelector("strong").textContent=g.L;
     r.querySelector(".t .small").textContent="Due "+dName(g.date)+" · "+g.items.join(", ")+(g.credit?` · ${peso(g.credit)} credit applied`:"");
     r.lastChild.textContent=peso2(g.amt);
-    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"card",amount:Math.round(g.amt*100)/100,cat:"credit",note:g.L+" card payment",lender:g.L,month:g.dm});
+    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"card",mode:"xfer",to:"to-"+({Unionbank:"unionbankcc",Metrobank:"metrobank"}[g.L]||g.L.toLowerCase()),acct:"cash",amount:Math.round(g.amt*100)/100,note:g.L+" card payment",lender:g.L,month:g.dm});
     due.appendChild(r);
+  });
+  (config.cards||[]).filter(c=>c.statement&&c.statementDue&&c.paidStmt!==c.statementDue).forEach(c=>{
+    const d=new Date(c.statementDue+"T00:00"), r=document.createElement("div");r.className="item";
+    r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Mark paid</button><strong></strong>';
+    r.querySelector("strong").textContent=c.name; r.querySelector(".t .small").textContent="Due "+dName(d)+" · statement · min "+peso(c.minDue||0);
+    r.lastChild.textContent=peso2(c.statement);
+    r.querySelector(".paybtn").onclick=()=>openSheet({kind:"stmt",mode:"xfer",to:"to-"+c.id,acct:"maribank",amount:c.statement,note:c.name+" payment",card:c.id});
+    (d.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first:due_list_rest).push(r);
   });
   (config.bills||[]).forEach((b,bi)=>{ if(!b.dueDay) return;
     let due=new Date(now.getFullYear(),now.getMonth(),b.dueDay);
@@ -489,10 +530,10 @@ function render(){
     const r=document.createElement("div");r.className="item";
     r.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong></strong><button class="del" type="button" aria-label="Delete entry"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>';
     r.querySelector(".t span").textContent=e.note||catName(e.cat);
-    r.querySelector(".t .small").textContent=catName(e.cat)+" · "+dName(new Date(e.date+"T00:00"));
+    r.querySelector(".t .small").textContent=(e.cat==="credit"&&e.ref?"Card payment → "+acctNameCard(e.ref):catName(e.cat))+" · "+dName(new Date(e.date+"T00:00"))+(e.acct&&e.acct!=="cash"?" · "+acctName(e.acct):"");
     r.querySelector("strong").textContent=peso2(e.amount);
     const tt=r.querySelector(".t"); tt.classList.add("tap"); tt.setAttribute("role","button"); tt.tabIndex=0;
-    tt.onclick=()=>openSheet({kind:"edit",entry:e,amount:e.amount,cat:e.cat,note:e.note,date:e.date});
+    tt.onclick=()=>openSheet({kind:"edit",entry:e,amount:e.amount,cat:e.cat,note:e.note,date:e.date,acct:e.acct,ref:e.ref});
     r.querySelector("button").onclick=async()=>{
       const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget and your Google Sheet.");
       if(!ok) return;
@@ -583,7 +624,36 @@ function renderPaydays(){
   t.appendChild(tb);
 }
 
+function renderAccounts(){
+  const B=balances(), sc=$("savingsCard"), cc=$("ccCard");
+  const accs=(config.accounts||[]).map(a=>B[a.id]);
+  sc.innerHTML=`<div class="row"><h2>Savings</h2><span class="pill good">${peso2(sum(accs,a=>a.bal))}</span></div><div class="list" id="accList"></div><div class="small muted">Income you log goes in, transfers and anything paid from these accounts comes out. Tap Adjust if a balance doesn't match your bank app.</div>`;
+  const al=$("accList");
+  accs.forEach(a=>{const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Adjust</button><strong></strong>';
+    r.querySelector("strong").textContent=a.name; r.querySelector(".t .small").textContent=(a.note?a.note+" · ":"")+`+${peso(a.inn)} in · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}`; r.lastChild.textContent=peso2(a.bal);
+    r.querySelector(".paybtn").onclick=()=>adjustAccount(a); al.appendChild(r)});
+  const cards=(config.cards||[]).filter(c=>c.start!=null).map(c=>B[c.id]);
+  cc.innerHTML=`<div class="row"><h2>Credit cards</h2><span class="pill warn">${peso2(sum(cards,c=>c.owed))} owed</span></div><div class="list" id="ccList"></div><div class="small muted">Owed = balance when you started tracking + purchases you log with this card − payments you log. Tap Adjust to match your card app.</div>`;
+  const cl=$("ccList");
+  cards.forEach(c=>{const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Adjust</button><strong></strong>';
+    r.querySelector("strong").textContent=c.name;
+    r.querySelector(".t .small").textContent=`Due the ${c.dueDay}${["","st","nd","rd"][c.dueDay]||"th"}`+(c.statement&&c.paidStmt!==c.statementDue?` · statement ${peso2(c.statement)} due ${dName(new Date(c.statementDue+"T00:00"))}`:"")+(c.buys?` · +${peso(c.buys)} new purchases`:"")+(c.paid?` · −${peso(c.paid)} paid`:"");
+    r.lastChild.textContent=peso2(c.owed); r.querySelector(".paybtn").onclick=()=>adjustAccount(c,true); cl.appendChild(r)});
+}
+function adjustAccount(a,isCard){
+  $("edTitle").textContent=(isCard?"What you owe on ":"Current balance of ")+a.name;
+  $("edText").textContent=isCard?"Enter the current balance from your card app. New purchases and payments you log will be tracked from now.":"Enter the balance from your bank app. Income, transfers and payments you log will be tracked from now.";
+  $("edAmt").value=Math.round((isCard?a.owed:a.bal)*100)/100; $("edFull").hidden=true;
+  $("edBack").hidden=false;$("ed").hidden=false;setTimeout(()=>{$("edAmt").focus();$("edAmt").select()},50);
+  const close=()=>{$("ed").hidden=true;$("edBack").hidden=true}; $("edNo").onclick=close;$("edBack").onclick=close;
+  $("edYes").onclick=async()=>{const v=parseFloat(String($("edAmt").value).replace(/,/g,""));if(!(v>=0)){toast("Enter an amount");return} close();
+    const today=ymd(new Date()), ts=new Date().toISOString();
+    try{ if(isCard){const cards=config.cards.map(x=>x.id===a.id?{...x,start:v,startDate:today,startTs:ts}:x);await call("setConfig",{patch:{cards}});}
+      else{const accounts=config.accounts.map(x=>x.id===a.id?{...x,start:v,startDate:today,startTs:ts}:x);await call("setConfig",{patch:{accounts}});}
+      toast("Balance updated")}catch(e){toast("Couldn't save. Try again.")}};
+}
 function renderDebts(){
+  if(config.accounts||config.cards) renderAccounts();
   const m=mkey(now); let total=0, last=config.startMonth;
   const box=$("debtList"); box.textContent="";
   [...config.debts].sort((a,b)=>debtEnd(a)<debtEnd(b)?-1:1).forEach(d=>{
@@ -611,7 +681,7 @@ function renderDebts(){
    <div class="small muted">${c.note||""}</div>
    ${rem?'<button class="primary" type="button" id="carryBtn">Log a carryover payment</button>':""}`;
    cc.querySelector("h2").textContent=c.name+" carryover";
-   const cb=$("carryBtn"); if(cb) cb.onclick=()=>openSheet({kind:"carry",cat:"credit",note:c.name+" carryover",amount:""});}
+   const cb=$("carryBtn"); if(cb) cb.onclick=()=>openSheet({kind:"carry",mode:"xfer",to:"to-metrobank",acct:"unionbank",note:c.name+" carryover",amount:""});}
 }
 
 let budView="pp", setDirty=false;
@@ -655,7 +725,10 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   const v=parseFloat($("amt").value.replace(/,/g,""));
   if(!(v>0)){toast("Enter an amount");return}
   const btn=$("addBtn");btn.disabled=true;
-  const c=ctx, vals={date:$("dt").value,cat:selCat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80)};
+  const c=ctx; let cat=selCat, ref="";
+  if(sheetMode==="xfer"){const to=selCat.slice(3); if(to===selAcct){toast("Pick a different account to move to");btn.disabled=false;return}
+    if(to==="maribank"||to==="unionbank"){cat="transfer";ref=to}else{cat="credit";ref=to}}
+  const vals={date:$("dt").value,cat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80)||(sheetMode==="xfer"?(cat==="credit"?acctNameCard(ref)+" payment":"To "+acctName(ref)):""),acct:selAcct,ref};
   if(c&&c.kind==="edit"){
     const upd={...c.entry,...vals}; const before=expenses;
     expenses=expenses.map(x=>x.id===upd.id?upd:x); render(); closeSheet();
@@ -668,6 +741,7 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   try{await call("add",{expense:exp});
     if(c&&c.kind==="bill"){const bills=config.bills.map((x,i)=>i===c.bill?{...x,paidMonth:c.month}:x);await call("setConfig",{patch:{bills}});}
     if(c&&c.kind==="card"){await call("setConfig",{patch:{paidCards:{...(config.paidCards||{}),[c.lender]:c.month}}});}
+    if(c&&c.kind==="stmt"){const cards=config.cards.map(x=>x.id===c.card?{...x,paidStmt:x.statementDue}:x);await call("setConfig",{patch:{cards}});}
     if(c&&c.kind==="carry"){await call("setConfig",{patch:{card:{...config.card,paidOff:Math.round(((config.card.paidOff||0)+vals.amount)*100)/100}}});}
     toast("Logged "+peso2(v));}
   catch(e){expenses=expenses.filter(x=>x.id!==exp.id);render();toast("Couldn't save. Check your connection.")}
@@ -696,14 +770,15 @@ function buildQuick(){const q=$("quick");q.textContent="";
   list.forEach(x=>{const b=document.createElement("button");b.type="button";b.className="quick";b.textContent=x.amount?`${x.note} · ${peso(x.amount)}`:x.note;
     b.onclick=()=>{$("note").value=x.note;pickCat(x.cat);if(x.amount)$("amt").value=x.amount;$("amt").focus()};q.appendChild(b)});}
 function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(new Date());
-  $("sheetTitle").textContent=pre&&pre.kind==="edit"?(String(pre.cat).startsWith("inc-")?"Edit income":"Edit expense"):pre&&pre.kind==="carry"?"Log carryover payment":"Log spending";
+  $("sheetTitle").textContent=pre&&pre.kind==="edit"?(String(pre.cat).startsWith("inc-")?"Edit income":pre.cat==="transfer"||pre.ref?"Edit transfer":"Edit expense"):pre&&pre.kind==="carry"?"Log carryover payment":"Log spending";
   $("addBtn").textContent=pre&&pre.kind==="edit"?"Save changes":"Save";
   $("quick").hidden=!!pre; if(!pre) buildQuick();
-  setMode(pre&&pre.cat&&String(pre.cat).startsWith("inc-")?"inc":"exp",pre&&pre.cat);
+  const pm=pre&&pre.mode?pre.mode:pre&&pre.cat&&String(pre.cat).startsWith("inc-")?"inc":pre&&(pre.cat==="transfer"||(pre.cat==="credit"&&pre.ref))?"xfer":"exp";
+  setMode(pm,pm==="xfer"?(pre.ref?"to-"+pre.ref:pre.to):pre&&pre.cat,pre&&pre.acct);
   if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
-$("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")};
+$("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")}; $("mXfer").onclick=()=>{if(!ctx)setMode("xfer")};
 $("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
