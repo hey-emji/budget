@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-512.png">
-<title>Budget</title>
+<title>bujjet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -36,7 +36,12 @@ html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
 main{max-width:520px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom));display:grid;gap:14px}
 h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.02em}
-h1{font-size:26px;font-weight:800}
+h1{font-size:26px;font-weight:800;min-height:34px;cursor:pointer}
+#brandText{display:inline-block;transition:opacity .35s ease,transform .35s ease}
+#brandText.out{opacity:0;transform:translateY(-6px)}
+#brandText.greet{font-size:20px;font-weight:700;letter-spacing:-.01em}
+#brandText.brand{letter-spacing:-.04em}
+#brandText.brand::after{content:".";color:var(--accent)}
 h2{font-size:16px;font-weight:700}
 .muted{color:var(--muted)} .small{font-size:13px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px;display:grid;gap:12px}
@@ -122,13 +127,13 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
 @keyframes up{from{transform:translateY(100%)}to{transform:none}}
 .toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
-@media (prefers-reduced-motion:reduce){.toast{transition:none}.sheet,.dialog,.reveal>.card{animation:none}.sk{animation:none}}
+@media (prefers-reduced-motion:reduce){#brandText{transition:none}.toast{transition:none}.sheet,.dialog,.reveal>.card{animation:none}.sk{animation:none}}
 </style>
 </head>
 <body>
 <main>
   <header class="row">
-    <div><h1>Budget</h1><div class="muted small" id="today"></div></div>
+    <div><h1 id="brand" role="button" tabindex="0" aria-live="polite"><span id="brandText">bujjet</span></h1><div class="muted small" id="today"></div></div>
     <span class="pill info" id="syncPill">Loading…</span>
   </header>
   <div id="notice" class="notice" hidden></div>
@@ -545,6 +550,43 @@ function confirmBox(title,text){return new Promise(res=>{
   $("dlgYes").onclick=()=>done(true);$("dlgNo").onclick=()=>done(false);$("dlgBack").onclick=()=>done(false);
 })}
 let revealed=false;
+/* ---------- greetings ---------- */
+function pickGreeting(){
+  const d=new Date(), h=d.getHours(), wd=d.getDay(), out=[], add=(w,...xs)=>xs.forEach(x=>{for(let i=0;i<w;i++)out.push(x)});
+  add(1,"Logged your expenses today?","Don't forget to log your expenses!","Every peso counts. Log it!","Small spends add up. Log 'em.",
+    "Quick check: anything to log?","Tap + before you forget.","Future you says thanks for logging.","Receipts in your pocket? Log them!",
+    "Hey Emji! Anything new to log?","Did you buy something? Log it!","Track it now, thank yourself later.","Your wallet called. It wants a log.",
+    "A quick log keeps the stress away.","No log, no idea where it went.","Spent something? You know what to do.","Little by little, ipon grows.");
+  if(h>=5&&h<11) add(2,"Good morning! Log before you sleep.","Morning, Emji! Spent anything on shift?","Shift's over! Quick log, then rest.","Good morning! How was the shift?");
+  else if(h>=11&&h<17) add(2,"Good afternoon! Just woke up?","Afternoon! Log yesterday's spending?","Rise and log, Emji.","Good afternoon! Coffee first, then log.");
+  else if(h>=17&&h<21) add(2,"Good evening! Ready for your shift?","Pre-shift reminder: log before you go.","Evening, Emji! Anything to log today?","Packed your baon? Saves a lot.");
+  else add(2,"On shift? Log that midnight snack.","Night shift snacks count too. Log it!","Coffee break? Log it.","Still up? So is your budget.","Graveyard shift, wide-awake wallet.");
+  if(config){
+    const today=ymd(d), nxt=upcomingPaydays(1)[0], dd=Math.round((nxt-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/864e5);
+    if(dd===0) add(4,"Payday! Set aside before you spend.","It's payday! Bills first, then fun.","Sweldo day! Check your set-asides.");
+    else if(dd<=3) add(3,`Payday in ${dd} day${dd>1?"s":""}. Hang in there!`,`${dd} day${dd>1?"s":""} to payday. Stretch it!`);
+    else add(1,`${dd} days to payday. Pace yourself.`);
+    const left=parseFloat(String($("heroLeft").textContent).replace(/[^0-9.\-−]/g,"").replace("−","-"));
+    if(!isNaN(left)&&left<0) add(4,"You're over budget. Let's slow down.","Over budget. Time for lutong bahay.");
+    else if(!isNaN(left)&&left<800) add(3,`Only ${peso(left)} left. Easy does it.`,"Tight week. Cook at home?");
+    if(!expenses.some(e=>e.date===today)&&h>=11) add(3,"Nothing logged today yet. Really?","Zero logs today. Suspicious.");
+    (config.bills||[]).forEach(b=>{if(!b.dueDay)return;const due=new Date(d.getFullYear(),d.getMonth(),b.dueDay);const k=mkey(due);
+      if(!(b.paidMonth&&b.paidMonth>=k)){const n=Math.round((due-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/864e5);if(n>=0&&n<=3)add(4,`${b.name} is due ${n===0?"today":"in "+n+" day"+(n>1?"s":"")}!`)}});
+    add(1,"Fewer sticks, more ipon.","Your lungs and wallet say thanks.","One less pack, one step closer.");
+  }
+  if(wd===6) add(3,"Grocery day! Bring your list.","Saturday: groceries at 5pm!");
+  if(wd===5) add(2,"Weekend's here. Watch the dining out.","Friday! Treat yourself, but log it.");
+  if(wd===0) add(2,"Sunday reset: check your budget.","Rest day. Plan the week's baon?");
+  return out[Math.floor(Math.random()*out.length)];
+}
+let greetTimer=null;
+function greet(){
+  const el=$("brandText"); clearTimeout(greetTimer);
+  const swap=(txt,cls,next)=>{el.classList.add("out");setTimeout(()=>{el.textContent=txt;el.className=cls+" out";requestAnimationFrame(()=>el.classList.remove("out"));if(next)greetTimer=setTimeout(next,4500)},350)};
+  swap(pickGreeting(),"greet",()=>swap("bujjet","brand"));
+}
+$("brand").onclick=greet; $("brand").onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();greet()}};
+$("brandText").className="brand";
 /* ---------- data ---------- */
 let API=null, PASS=null;
 try{API=localStorage.getItem("budget.api");PASS=localStorage.getItem("budget.pass")}catch(e){}
@@ -553,7 +595,7 @@ function apply(j){
   if(!j||j.error) throw new Error(j&&j.error||"bad_response");
   config=j.config; expenses=j.expenses||[]; paydays=j.paydays||{};
   $("syncPill").textContent="Synced"; setNotice(""); $("setupForm").hidden=true; render();
-  if(!revealed){revealed=true;$("skel").hidden=true;const t=$("todayContent");t.hidden=false;t.classList.add("reveal");}
+  if(!revealed){setTimeout(greet,700);revealed=true;$("skel").hidden=true;const t=$("todayContent");t.hidden=false;t.classList.add("reveal");}
 }
 async function load(){
   if(!API||!PASS){$("skel").hidden=true;$("setupForm").hidden=false;$("syncPill").textContent="Not connected";return}

@@ -1,6 +1,6 @@
 {
-  "name": "Budget",
-  "short_name": "Budget",
+  "name": "bujjet",
+  "short_name": "bujjet",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
