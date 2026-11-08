@@ -326,6 +326,33 @@ function cigCap(m){const p=[...(config.cigPlan||[])].sort((a,b)=>a.month<b.month
 function sum(a,f){return a.reduce((s,x)=>s+(Number(f(x))||0),0)}
 function instMonth(m){return sum(config.debts.filter(d=>debtActive(d,m)),d=>d.monthly)}
 function creditMonth(m){return sum((config.credits||[]).filter(c=>c.month===m),c=>c.amount)}
+const LCARD={metrobank:"Metrobank",unionbankcc:"Unionbank"};
+function monthDue(L,mm,credits){return sum(config.debts.filter(d=>d.lender===L&&debtActive(d,mm)),d=>d.monthly)-sum((credits||[]).filter(c=>c.lender===L&&c.month===mm),c=>c.amount)}
+function hasDebts(L,mm){return config.debts.some(d=>d.lender===L&&debtActive(d,mm))}
+function firstUnpaid(L,paid,credits){const dd=(config.debts.find(d=>d.lender===L)||{}).dueDay||1;
+  let mm=now.getDate()<=dd?mAdd(mkey(now),-1):mkey(now);
+  for(let i=0;i<40;i++){ if((paid[L]||"")>=mAdd(mm,1)||(hasDebts(L,mm)&&monthDue(L,mm,credits)<=0.01)){mm=mAdd(mm,1);continue} break } return mm}
+function applyInstallmentPayment(L,amt,src){
+  const credits=[...(config.credits||[])], paid={...(config.paidCards||{})}, prev=paid[L]||"";
+  let left=amt, mm=firstUnpaid(L,paid,credits);
+  for(let i=0;i<40&&left>0.009;i++){
+    if(!hasDebts(L,mm)) break;
+    const due=monthDue(L,mm,credits); if(due<=0.01){mm=mAdd(mm,1);continue}
+    const c=Math.min(left,due), [y,mo]=mm.split("-").map(Number), funded=new Date()>=payDate(y,mo-1,2);
+    if(!funded) credits.push({label:"Paid early "+dName(new Date()),lender:L,amount:Math.round(c*100)/100,month:mm,src});
+    left-=c; if(c>=due-0.01) paid[L]=mAdd(mm,1); else break;
+    mm=mAdd(mm,1);
+  }
+  if(left>0.009) credits.push({label:"Extra payment "+dName(new Date()),lender:L,amount:Math.round(left*100)/100,month:mm,src});
+  const payUndo={...(config.payUndo||{}),[src]:{L,prev}};
+  return {credits,paidCards:paid,payUndo};
+}
+function undoPaymentPatch(src){
+  if(!((config.credits||[]).some(c=>c.src===src)||(config.payUndo||{})[src])) return null;
+  const u=(config.payUndo||{})[src], paid={...(config.paidCards||{})}; if(u){ if(u.prev) paid[u.L]=u.prev; else delete paid[u.L]; }
+  const payUndo={...(config.payUndo||{})}; delete payUndo[src];
+  return {credits:(config.credits||[]).filter(c=>c.src!==src),paidCards:paid,payUndo};
+}
 function cardItems(m){return [...new Set(config.debts.map(d=>d.lender))].map(L=>{
     const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,m)); if(!ds.length) return null;
     const cr=sum((config.credits||[]).filter(c=>c.month===m&&c.lender===L),c=>c.amount);
@@ -475,7 +502,7 @@ function render(){
   const due=$("dueList"); due.textContent=""; const due_list_first=[],due_list_rest=[];
   const paidCards=config.paidCards||{}, nm=mAdd(m,1),[ny,nmo]=nm.split("-").map(Number);
   [...new Set(config.debts.map(d=>d.lender))].map(L=>{
-    const mm=(paidCards[L]||"")>=mAdd(m,1)?mAdd(m,1):m, dm=mAdd(mm,1);
+    const mm=firstUnpaid(L,paidCards,config.credits||[]), dm=mAdd(mm,1);
     const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)); if(!ds.length) return null;
     const credit=sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount);
     const [dy,dmo]=dm.split("-").map(Number);
@@ -507,12 +534,12 @@ function render(){
     due.getTime()<new Date(ny,nmo-1,1).getTime()?due_list_first.push(r):due_list_rest.push(r);
   });
   due_list_first.forEach(r=>due.insertBefore(r,due.firstChild)); due_list_rest.forEach(r=>due.appendChild(r));
-  if(config.card && config.card.carryover>0){
+  if(config.card && config.card.carryover-(config.card.paidOff||0)>0.01){
     const r=document.createElement("div");r.className="item";
     r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill warn">Extra</span><strong></strong>';
     r.querySelector("strong").textContent=config.card.name+" carried-over balance";
     r.querySelector(".t .small").textContent="Not in the plan yet · gets finance charges monthly";
-    r.lastChild.textContent=peso2(config.card.carryover);
+    r.lastChild.textContent=peso2(config.card.carryover-(config.card.paidOff||0));
     due.appendChild(r);
   }
 
@@ -537,7 +564,7 @@ function render(){
     r.querySelector("button").onclick=async()=>{
       const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget and your Google Sheet.");
       if(!ok) return;
-      try{await call("delete",{id:e.id});toast("Deleted")}catch(err){toast("Couldn't delete. Try again.")}};
+      try{await call("delete",{id:e.id});const u=undoPaymentPatch(e.id);if(u)await call("setConfig",{patch:u});toast("Deleted")}catch(err){toast("Couldn't delete. Try again.")}};
     list.appendChild(r);
   });
 
@@ -669,6 +696,8 @@ function renderDebts(){
     s[1].textContent=done?"":`Ends ${mName(end)}`;
     box.appendChild(el);
   });
+  const prepaid=sum((config.credits||[]).filter(c=>c.month>=m&&config.debts.some(d=>d.lender===c.lender)),c=>c.amount);
+  total=Math.max(0,total-prepaid);
   $("debtTotal").textContent=peso2(total);
   $("debtFree").textContent=`Installment-free after ${mName(last,true)} · ${peso2(instMonth(m))} due this month`;
   const c=config.card, cc=$("cardCard");
@@ -732,7 +761,10 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   if(c&&c.kind==="edit"){
     const upd={...c.entry,...vals}; const before=expenses;
     expenses=expenses.map(x=>x.id===upd.id?upd:x); render(); closeSheet();
-    try{await call("delete",{id:upd.id});await call("add",{expense:upd});toast("Updated")}
+    try{await call("delete",{id:upd.id});await call("add",{expense:upd});
+      const u=undoPaymentPatch(upd.id); if(u){await call("setConfig",{patch:u});}
+      if(upd.cat==="credit"&&LCARD[upd.ref]){await call("setConfig",{patch:applyInstallmentPayment(LCARD[upd.ref],upd.amount,upd.id)});}
+      toast("Updated")}
     catch(e){expenses=before;render();toast("Couldn't save. Check your connection.");load()}
     btn.disabled=false; return;
   }
@@ -740,7 +772,7 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   expenses=[...expenses,exp]; render(); closeSheet(); $("amt").value="";$("note").value="";
   try{await call("add",{expense:exp});
     if(c&&c.kind==="bill"){const bills=config.bills.map((x,i)=>i===c.bill?{...x,paidMonth:c.month}:x);await call("setConfig",{patch:{bills}});}
-    if(c&&c.kind==="card"){await call("setConfig",{patch:{paidCards:{...(config.paidCards||{}),[c.lender]:c.month}}});}
+    if(vals.cat==="credit"&&LCARD[vals.ref]&&!(c&&c.kind==="carry")){await call("setConfig",{patch:applyInstallmentPayment(LCARD[vals.ref],vals.amount,exp.id)});}
     if(c&&c.kind==="stmt"){const cards=config.cards.map(x=>x.id===c.card?{...x,paidStmt:x.statementDue}:x);await call("setConfig",{patch:{cards}});}
     if(c&&c.kind==="carry"){await call("setConfig",{patch:{card:{...config.card,paidOff:Math.round(((config.card.paidOff||0)+vals.amount)*100)/100}}});}
     toast("Logged "+peso2(v));}
