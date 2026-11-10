@@ -192,6 +192,27 @@ body.onbopen nav,body.onbopen main{display:none}
 .mgrow:first-child{border-top:none}.chev{color:var(--muted);font-size:20px}
 select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
 #dataCard a{color:var(--accent)}
+
+/* ---- touch, sound and save feedback ---- */
+button,.chip,.tap,.quick,[role=button],nav .tab{-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .12s ease,filter .12s ease,background-color .15s ease,opacity .15s ease}
+button:not(:disabled):active,.chip:active,.quick:active,[role=button]:active,.is-pressed{transform:scale(.95);filter:brightness(.9)}
+.tap:active,.tap.is-pressed{transform:none;filter:none;opacity:.55}
+nav .tab:active,nav .tab.is-pressed{transform:scale(.88);filter:none;color:var(--accent)}
+.fab:active,.fab.is-pressed{transform:translateY(-14px) scale(.9)}
+button.primary,button.danger,.fab{--spin:#fff}
+button.busy,button.done{position:relative;color:transparent!important;pointer-events:none}
+button.busy>*,button.done>*{visibility:hidden}
+button.busy::after{content:"";position:absolute;inset:0;margin:auto;width:18px;height:18px;border-radius:50%;border:2.5px solid var(--spin,var(--ink));border-right-color:transparent;animation:fxspin .7s linear infinite}
+button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font:800 19px var(--body);color:var(--spin,var(--good));animation:fxpop .25s ease-out}
+#syncPill{transition:background-color .2s,color .2s}
+#syncPill.saving::before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:fxspin .7s linear infinite}
+.toast.ok::before{content:"✓";display:inline-block;margin-right:7px;font-weight:800;color:var(--good)}
+.toast.err::before{content:"!";display:inline-grid;place-items:center;width:17px;height:17px;margin-right:7px;border-radius:50%;background:var(--bad);color:#fff;font-weight:800;font-size:12px}
+.fxrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0}
+.fxrow input{width:20px;height:20px;accent-color:var(--accent)}
+@keyframes fxspin{to{transform:rotate(360deg)}}
+@keyframes fxpop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){button,.chip,.tap,.quick,[role=button],nav .tab{transition:none}button:not(:disabled):active,.chip:active,.quick:active,[role=button]:active,.is-pressed,nav .tab:active{transform:none}.fab:active,.fab.is-pressed{transform:translateY(-14px)}button.done::after{animation:none}}
 </style>
 </head>
 <body>
@@ -284,7 +305,8 @@ select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px so
       <div id="setFields" style="display:grid;gap:10px"></div>
       <button class="primary" type="submit">Save changes</button>
       <div class="small muted">When a paycheck is short, categories are trimmed from the bottom of the list up. Cards and bills are always covered first.</div>
-    </form>
+    <label class="fxrow small"><span>Sounds and vibration on taps and saves</span><input type="checkbox" id="fxToggle"></label>
+      </form>
     <div class="card" id="manageCard">
       <h2>Manage</h2>
       <div class="list" id="manageList"></div>
@@ -1203,6 +1225,64 @@ $("eraseBtn").onclick=async()=>{if(!(await confirmBox("Erase everything?","This 
 
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&store&&store.config){now=new Date();render()}});
 if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
+
+/* ---------- touch, sound and save feedback ---------- */
+(()=>{
+  let fxOn=true; try{fxOn=localStorage.getItem("bujjet.fx")!=="off"}catch(e){}
+  const SEL="button,.chip,.tap,.quick,[role=button]";
+  document.addEventListener("touchstart",()=>{},{passive:true}); // lets iPhone show :active
+  // vibration: Android uses navigator.vibrate; iPhone (iOS 18+) gets a tick from a hidden switch
+  const hl=document.createElement("label"); hl.setAttribute("aria-hidden","true");
+  hl.style.cssText="position:fixed;left:-200px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none";
+  const hi=document.createElement("input"); hi.type="checkbox"; hi.setAttribute("switch",""); hi.tabIndex=-1; hl.appendChild(hi); document.body.appendChild(hl);
+  const canVibe=typeof navigator.vibrate==="function";
+  function buzz(p){ if(!fxOn) return; try{ if(canVibe) navigator.vibrate(p); else hl.click(); }catch(e){} }
+  // soft sounds made in the browser, no files
+  let ac=null;
+  function tone(fs,dur,vol){ if(!fxOn) return; try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==="suspended") ac.resume();
+    let t=ac.currentTime+.005;
+    fs.forEach(f=>{const o=ac.createOscillator(),g=ac.createGain(); o.type="sine"; o.frequency.value=f;
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+.008); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+dur+.03); t+=dur*.75;});
+  }catch(e){} }
+  const sTap=()=>tone([1500],.035,.03), sOk=()=>tone([880,1318],.1,.06), sErr=()=>tone([330,233],.14,.06);
+  // press state
+  const unpress=()=>document.querySelectorAll(".is-pressed").forEach(x=>x.classList.remove("is-pressed"));
+  document.addEventListener("pointerdown",e=>{const b=e.target.closest(SEL); if(b&&!b.disabled) b.classList.add("is-pressed")},{passive:true});
+  ["pointerup","pointercancel","scroll"].forEach(ev=>document.addEventListener(ev,unpress,{passive:true,capture:true}));
+  let lastBtn=null,lastAt=0;
+  document.addEventListener("click",e=>{const b=e.target.closest(SEL); if(!b||b.disabled||b===hl) return;
+    lastBtn=b.tagName==="BUTTON"?b:null; lastAt=Date.now(); sTap(); buzz(8);},true);
+  document.addEventListener("submit",e=>{ if(e.submitter){lastBtn=e.submitter; lastAt=Date.now();} },true);
+  // saving states
+  const pill=()=>$("syncPill"); let pend=0, okAt=0, errAt=0, pillT=0, idle="";
+  function setPill(s){const p=pill(); if(!p) return; clearTimeout(pillT);
+    if(s==="saving"){ if(!p.classList.contains("saving")) idle=p.textContent; p.className="pill info saving"; p.textContent="Saving…"; }
+    else if(s==="ok"){ p.className="pill good"; p.textContent="Saved ✓"; pillT=setTimeout(()=>{p.className="pill info"; p.textContent=/Saved/.test(idle)?"Saved":(idle&&!/Saving|Loading/.test(idle)?idle:"Synced")},1600); }
+    else { p.className="pill bad"; p.textContent="Not saved"; pillT=setTimeout(()=>{p.className="pill info"; p.textContent="Offline"},4000); }
+  }
+  const _call=call;
+  call=async function(...args){
+    const b=(lastBtn&&lastBtn.isConnected&&Date.now()-lastAt<2000)?lastBtn:null; lastBtn=null;
+    pend++; setPill("saving"); if(b){b.classList.remove("done"); b.classList.add("busy");}
+    let ok=false;
+    try{ const r=await _call.apply(this,args); ok=true; okAt=Date.now(); return r; }
+    catch(e){ errAt=Date.now(); throw e; }
+    finally{ pend--;
+      if(b){ b.classList.remove("busy"); if(ok&&b.isConnected&&b.offsetParent){ b.classList.add("done"); buzz(12); setTimeout(()=>b.classList.remove("done"),900);} }
+      if(!pend) setPill(ok?"ok":"err"); }
+  };
+  const _toast=toast;
+  toast=function(t){ _toast(t); const e=$("toast"); const bad=/^(Couldn't|Can't|Not saved)/.test(t), ok=!bad&&Date.now()-okAt<5000;
+    e.classList.toggle("ok",ok); e.classList.toggle("err",bad);
+    if(bad){ sErr(); buzz([25,50,25]); } else if(ok){ sOk(); } };
+  // loading spinner while refreshing from the sheet
+  if(typeof load==="function"){ const _load=load; load=async function(...a){ const p=pill(); if(p&&/Loading/.test(p.textContent)) p.classList.add("saving"); try{ return await _load.apply(this,a);} finally{ const q=pill(); if(q&&!pend) q.classList.remove("saving"); } }; }
+  // settings switch
+  const t=$("fxToggle"); if(t){ t.checked=fxOn; t.onchange=()=>{ fxOn=t.checked; try{localStorage.setItem("bujjet.fx",fxOn?"on":"off")}catch(e){} if(fxOn){sOk();buzz(12)} toast(fxOn?"Sounds and vibration on":"Sounds and vibration off"); }; }
+})();
+
 load();
 
 </script>
