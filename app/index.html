@@ -773,12 +773,28 @@ function renderAccounts(){
     r.querySelector("strong").textContent=a.name; r.querySelector(".t .small").textContent=(a.note?a.note+" · ":"")+`+${peso(a.inn)} in${a.sal?` (incl. ${peso(a.sal)} salary)`:""} · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}`; r.lastChild.textContent=peso2(a.bal);
     r.querySelector(".paybtn").onclick=()=>adjustAccount(a); al.appendChild(r)});
   const cards=(config.cards||[]).filter(c=>c.start!=null).map(c=>B[c.id]);
-  cc.innerHTML=`<div class="row"><h2>Credit cards</h2><span class="pill warn">${peso2(sum(cards,c=>c.owed))} owed</span></div><div class="list" id="ccList"></div><div class="small muted">Owed = balance when you started tracking + purchases you log with this card − payments you log. Tap Adjust to match your card app.</div>`;
+  cc.innerHTML=`<div class="row"><h2>Credit cards</h2><span class="pill warn">${peso2(sum(cards,c=>c.owed))} owed</span></div><div class="list" id="ccList"></div><div class="small muted">Regular cards: balance when you started tracking + purchases you log − payments you log (tap Adjust to match your card app). Installment cards: installments left to pay, minus any credit.</div>`;
   const cl=$("ccList");
   cards.forEach(c=>{const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Adjust</button><strong></strong>';
     r.querySelector("strong").textContent=c.name;
     r.querySelector(".t .small").textContent=`Due the ${c.dueDay}${["","st","nd","rd"][c.dueDay]||"th"}`+(c.statement&&c.paidStmt!==c.statementDue?` · statement ${peso2(c.statement)} due ${dName(new Date(c.statementDue+"T00:00"))}`:"")+(c.buys?` · +${peso(c.buys)} new purchases`:"")+(c.paid?` · −${peso(c.paid)} paid`:"");
     r.lastChild.textContent=peso2(c.owed); r.querySelector(".paybtn").onclick=()=>adjustAccount(c,true); cl.appendChild(r)});
+  // installment cards (Metrobank, Unionbank, etc.)
+  const m=mkey(now); let instTotal=0;
+  [...new Set(config.debts.map(d=>d.lender))].forEach(L=>{
+    const card=(config.cards||[]).find(c=>c.lender===L)||(config.cards||[]).find(c=>c.name.toLowerCase().startsWith(L.toLowerCase()));
+    if(card&&card.start!=null) return;
+    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,m)); if(!ds.length) return;
+    const left=sum(ds,d=>{const n=Math.min(d.total,d.current+Math.max(0,mDiff(config.startMonth,m)));return (d.total-n+1)*d.monthly})
+      -sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
+    instTotal+=Math.max(0,left);
+    const mm=firstUnpaid(L,config.paidCards||{},config.credits||[]), due=Math.max(0,monthDue(L,mm,config.credits||[])), dm=mAdd(mm,1), [dy,dmo]=dm.split("-").map(Number);
+    const dd=new Date(dy,dmo-1,(ds[0]||{}).dueDay||1), cred=sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
+    const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill info">Installments</span><strong></strong>';
+    r.querySelector("strong").textContent=card?card.name:(/card$/i.test(L)?L:L+" card");
+    r.querySelector(".t .small").textContent=`Next ${peso(due)} due ${dName(dd)} · ${ds.length} installment${ds.length>1?"s":""}`+(cred?` · ${peso(cred)} credit`:"");
+    r.lastChild.textContent=peso2(Math.max(0,left)); cl.appendChild(r)});
+  cc.querySelector(".pill.warn").textContent=peso2(sum(cards,c=>c.owed)+instTotal)+" owed";
 }
 function adjustAccount(a,isCard){
   $("edTitle").textContent=(isCard?"What you owe on ":"Current balance of ")+a.name;
