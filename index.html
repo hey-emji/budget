@@ -219,6 +219,7 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
         <div class="row"><h2 id="budTitle">Your Budget This Period</h2><span class="small muted" id="monthName"></span></div>
         <div id="cutNote" class="notice" hidden></div>
         <div id="cats" style="display:grid;gap:12px"></div>
+        <div id="planRow" class="total-row" hidden><div class="t"><span>Planned budget left</span><span class="small muted" id="planNote"></span></div><strong id="planLeft"></strong></div>
       </div>
 
       <div class="card">
@@ -517,8 +518,12 @@ function render(){
   else { $("heroLabel").textContent="Left until payday"; $("heroLeft").textContent=peso(left); window._money=null; }
   const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
   $("heroSub").textContent=window._money!=null
-    ?`In ${window._spendNames} · Budget left this period ${peso(left)} · about ${peso(Math.max(0,Math.min(left,window._money))/daysLeft)} a day for ${daysLeft} days`
+    ?`In ${window._spendNames} · Planned budget left ${peso(left)} · about ${peso(Math.max(0,Math.min(left,window._money))/daysLeft)} a day for ${daysLeft} days`
     :`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
+  const pr=$("planRow"); if(pr){ if(pOff===0){ pr.hidden=false; $("planLeft").textContent=peso(left);
+    const base="This period's budgets minus what you've logged.";
+    $("planNote").textContent=window._money==null?base:window._money<left-0.5?`${base} You have ${peso(left-window._money)} less in ${window._spendNames} than planned, so ${peso(window._money)} is your real limit.`:`${base} Money left to spend at the top is what's actually in ${window._spendNames}.`;
+  } else pr.hidden=true; }
   const next=upcomingPaydays(1)[0], dd=Math.round((next-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
   $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
 
