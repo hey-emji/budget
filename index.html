@@ -314,7 +314,8 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
     <div class="card" id="dataCard">
       <div class="row"><h2>Backup & data</h2><span class="pill good" id="localPill">On this phone</span></div>
       <div class="small muted" id="backupInfo"></div>
-      <div class="inline"><button class="primary" type="button" id="exportBtn">Export backup</button><button class="secondary" type="button" id="importBtn">Import backup</button></div>
+      <div class="inline"><button class="primary" type="button" id="exportBtn">Save backup file</button><button class="secondary" type="button" id="shareBtn">Share backup…</button></div>
+      <button class="secondary" type="button" id="importBtn">Import backup</button>
       <input type="file" id="importFile" accept=".bujjet,.json,application/json" hidden>
       <button class="ghost" type="button" id="eraseBtn" style="justify-self:start;color:var(--bad)">Erase all data on this phone</button>
       <div class="small muted">bujjet doesn't give financial advice. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></div>
@@ -947,8 +948,9 @@ $("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)s
 $("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
-function confirmBox(title,text){return new Promise(res=>{
-  $("dlgTitle").textContent=title;$("dlgText").textContent=text;$("dlg").hidden=false;$("dlgBack").hidden=false;$("dlgNo").focus();
+function confirmBox(title,text,opts){opts=opts||{};return new Promise(res=>{
+  $("dlgTitle").textContent=title;$("dlgText").textContent=text;$("dlgYes").textContent=opts.yes||"Delete";$("dlgYes").className=opts.ok?"primary":"danger";$("dlgNo").hidden=!!opts.ok;
+  $("dlg").hidden=false;$("dlgBack").hidden=false;(opts.ok?$("dlgYes"):$("dlgNo")).focus();
   const done=v=>{$("dlg").hidden=true;$("dlgBack").hidden=true;$("dlgYes").onclick=$("dlgNo").onclick=$("dlgBack").onclick=null;res(v)};
   $("dlgYes").onclick=()=>done(true);$("dlgNo").onclick=()=>done(false);$("dlgBack").onclick=()=>done(false);
 })}
@@ -1213,30 +1215,39 @@ function renderBackup(){const i=$("backupInfo");if(!i||!config)return;const last
   const days=last?Math.floor((Date.now()-new Date(last))/864e5):null;
   i.textContent=`Your data is saved only on this phone. ${last?`Last backup: ${days===0?"today":days+" day"+(days>1?"s":"")+" ago"}.`:"You haven't exported a backup yet."} Export a backup to move to another device or keep a copy.`;
   if(days==null||days>=14) setNotice(last?`It's been ${days} days since your last backup. Export one from the Budget tab.`:""); }
-$("exportBtn").onclick=async()=>{
-  const pw=await askPassword("Export backup","Add a password to encrypt the file (recommended). You'll need it to import. Leave empty for no password.","Export");
+async function doExport(mode){
+  const pw=await askPassword(mode==="share"?"Share backup":"Save backup file","Add a password to encrypt the file (recommended). You'll need it to import. Leave empty for no password.",mode==="share"?"Share":"Save");
   if(pw===null) return;
   try{const payload={app:"bujjet",format:1,exportedAt:new Date().toISOString(),state:store};
     const out=pw?await encryptJSON(payload,pw):payload;
-    const blob=new Blob([JSON.stringify(out)],{type:"application/json"}), name=`bujjet-${ymd(new Date())}.bujjet`;
-    const file=new File([blob],name,{type:"application/json"});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:"bujjet backup"})}catch(e){if(e&&e.name==="AbortError")return}}
-    else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
-    await call("setConfig",{patch:{lastExport:new Date().toISOString()}}); toast("Backup exported");
+    const name=`bujjet-${ymd(new Date())}.bujjet`;
+    if(mode==="share"){
+      const file=new File([JSON.stringify(out)],name,{type:"application/octet-stream"});
+      if(!(navigator.canShare&&navigator.canShare({files:[file]}))){toast("Sharing isn't supported here. Use Save backup file.");return}
+      try{await navigator.share({files:[file],title:"bujjet backup"})}catch(e){if(e&&e.name==="AbortError"){toast("Share cancelled. Nothing was saved.");return} throw e}
+      await call("setConfig",{patch:{lastExport:new Date().toISOString()}}); toast("Backup shared");
+    }else{
+      const blob=new Blob([JSON.stringify(out)],{type:"application/octet-stream"});
+      const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+      await call("setConfig",{patch:{lastExport:new Date().toISOString()}});
+      await confirmBox("Backup saved","Look for "+name+" in your phone's Files app → Downloads. If you don't see it, use Share backup… instead and send it to Google Drive or Messenger.",{ok:true,yes:"Got it"});
+    }
   }catch(e){toast("Couldn't export. Try again.")}
-};
+}
+$("exportBtn").onclick=()=>doExport("save");
+$("shareBtn").onclick=()=>doExport("share");
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=async ev=>{const f=ev.target.files[0]; ev.target.value=""; if(!f) return;
   try{let j=JSON.parse(await f.text());
     if(j.encrypted){const pw=await askPassword("Backup password","This backup is encrypted. Enter the password you used when exporting.","Unlock"); if(pw===null) return;
       try{j=await decryptJSON(j,pw)}catch(e){toast("Wrong password");return}}
     const st=j.state||j; if(!st||!st.config){toast("That file isn't a bujjet backup");return}
-    if(store&&store.config&&!(await confirmBox("Replace data on this phone?","Importing replaces everything currently on this phone with the backup."))) return;
+    if(store&&store.config&&!(await confirmBox("Replace data on this phone?","Importing replaces everything currently on this phone with the backup.",{yes:"Replace"}))) return;
     store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{}}; await persist();
     $("onb").hidden=true; document.body.classList.remove("onbopen"); apply(store); toast("Backup imported");
   }catch(e){toast("Couldn't read that file")}
 };
-$("eraseBtn").onclick=async()=>{if(!(await confirmBox("Erase everything?","This deletes all your bujjet data on this phone. Export a backup first if you want to keep it.")))return;
+$("eraseBtn").onclick=async()=>{if(!(await confirmBox("Erase everything?","This deletes all your bujjet data on this phone. Export a backup first if you want to keep it.",{yes:"Erase"})))return;
   try{await idbSet("state",null);localStorage.removeItem("bujjet.state")}catch(e){} location.reload()};
 
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&store&&store.config){now=new Date();render()}});
