@@ -132,7 +132,11 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .hdrright{display:flex;align-items:center;gap:8px;flex:none}
 .gear{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
 .gear svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.prefhead{align-items:center}.preftitle{font-size:22px}
+.prefhead{display:grid;grid-template-columns:40px 1fr 40px;align-items:center}.preftitle{font-size:22px;text-align:center;margin:0}
+.prefslink{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:14px 16px;color:var(--ink);font:inherit;cursor:pointer}
+.prefslink .ic{width:38px;height:38px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.prefslink .ic svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.prefslink .tx{flex:1;min-width:0;display:grid;gap:2px}.prefslink .tx strong{font-size:16px}.prefslink .chev{color:var(--muted);font-size:22px}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
 #upDlg{z-index:29}#upBack{z-index:28}
@@ -328,13 +332,13 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <button class="primary" type="submit">Save changes</button>
       <div class="small muted">When a paycheck is short, categories are trimmed from the bottom of the list up. Cards and bills are always covered first.</div>
       </form>
-    <button class="secondary" type="button" id="toPrefs">Settings: accounts, cards, bills & backup ›</button>
+    <button class="prefslink" type="button" id="toPrefs"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span><span class="tx"><strong>Settings</strong><span class="small muted">Accounts, cards, bills, subscriptions and backup</span></span><span class="chev">›</span></button>
   </section>
 
   <!-- PREFERENCES / SETTINGS PAGE -->
   <section class="view" id="v-prefs" hidden>
     <div style="display:grid;gap:14px">
-      <div class="row prefhead"><button class="backbtn" type="button" id="prefsBack" aria-label="Back">‹</button><h2 class="preftitle">Settings</h2><span></span></div>
+      <div class="prefhead"><button class="backbtn" type="button" id="prefsBack" aria-label="Back">‹</button><h2 class="preftitle">Settings</h2><span></span></div>
       <div class="card"><h2>You</h2><div class="list" id="mg-you"></div></div>
       <div class="card"><h2>Money</h2><div class="list" id="mg-money"></div></div>
       <div class="card"><h2>Budget setup</h2><div class="list" id="mg-budget"></div></div>
@@ -470,9 +474,16 @@ function hasDebts(L,mm){return config.debts.some(d=>d.lender===L&&debtActive(d,m
 function firstUnpaid(L,paid,credits){const dd=(config.debts.find(d=>d.lender===L)||{}).dueDay||1;
   let mm=now.getDate()<=dd?mAdd(mkey(now),-1):mkey(now);
   for(let i=0;i<40;i++){ if((paid[L]||"")>=mAdd(mm,1)||(hasDebts(L,mm)&&monthDue(L,mm,credits)<=0.01)){mm=mAdd(mm,1);continue} break } return mm}
+const lcard=L=>(config.cards||[]).find(c=>c.lender===L);
+function subCharges(L){const c=lcard(L); if(!c) return 0; const cur=mkey(new Date()); let t=0;
+  (config.subs||[]).filter(s=>s.card===c.id&&/^\d{4}-\d{2}$/.test(s.from||"")).forEach(s=>{for(let m=s.from,i=0;m<=cur&&i<120;m=mAdd(m,1),i++) t+=Number(s.amount)||0;}); return t;}
+function cardBuys(L){const c=lcard(L); if(!c||!c.otherFrom) return 0; return sum(expenses.filter(e=>e.acct===c.id&&String(e.date)>=c.otherFrom&&!isInc(e)&&e.cat!=="credit"&&e.cat!=="transfer"),e=>e.amount)}
+function nextCardDue(L){const dd=(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1, t=new Date(), d=new Date(t.getFullYear(),t.getMonth(),dd); return ymd(d)>=ymd(t)?d:new Date(t.getFullYear(),t.getMonth()+1,dd)}
+function otherOwed(L,ex){return Math.max(0,Math.round((subCharges(L)+cardBuys(L)-sum((config.otherPays||[]).filter(p=>p.L===L&&p.src!==ex),p=>p.amount))*100)/100)}
 function applyInstallmentPayment(L,amt,src){
   const credits=[...(config.credits||[])], paid={...(config.paidCards||{})}, prev=paid[L]||"";
-  let left=amt, mm=firstUnpaid(L,paid,credits);
+  const otherPays=(config.otherPays||[]).filter(p=>p.src!==src), o=Math.min(amt,otherOwed(L,src)); if(o>0.009) otherPays.push({L,amount:Math.round(o*100)/100,src});
+  let left=amt-o, mm=firstUnpaid(L,paid,credits);
   for(let i=0;i<40&&left>0.009;i++){
     if(!hasDebts(L,mm)) break;
     const due=monthDue(L,mm,credits); if(due<=0.01){mm=mAdd(mm,1);continue}
@@ -483,13 +494,13 @@ function applyInstallmentPayment(L,amt,src){
   }
   if(left>0.009) credits.push({label:"Extra payment "+dName(new Date()),lender:L,amount:Math.round(left*100)/100,month:mm,src});
   const payUndo={...(config.payUndo||{}),[src]:{L,prev}};
-  return {credits,paidCards:paid,payUndo};
+  return {credits,paidCards:paid,payUndo,otherPays};
 }
 function undoPaymentPatch(src){
-  if(!((config.credits||[]).some(c=>c.src===src)||(config.payUndo||{})[src])) return null;
+  if(!((config.credits||[]).some(c=>c.src===src)||(config.payUndo||{})[src]||(config.otherPays||[]).some(p=>p.src===src))) return null;
   const u=(config.payUndo||{})[src], paid={...(config.paidCards||{})}; if(u){ if(u.prev) paid[u.L]=u.prev; else delete paid[u.L]; }
   const payUndo={...(config.payUndo||{})}; delete payUndo[src];
-  return {credits:(config.credits||[]).filter(c=>c.src!==src),paidCards:paid,payUndo};
+  return {credits:(config.credits||[]).filter(c=>c.src!==src),paidCards:paid,payUndo,otherPays:(config.otherPays||[]).filter(p=>p.src!==src)};
 }
 function cardItems(m){return [...new Set(config.debts.map(d=>d.lender))].map(L=>{
     const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,m)); if(!ds.length) return null;
@@ -589,7 +600,7 @@ function renderMoneyIn(per,incMine){
     el.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong class="pos"></strong>'+(r.e?'<button class="del" type="button" aria-label="Delete income"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>':'<span></span>');
     el.querySelector(".t span").textContent=r.name; el.querySelector(".t .small").textContent=r.sub; el.querySelector("strong").textContent="+"+peso2(r.amt);
     if(r.e){const tt=el.querySelector(".t");tt.classList.add("tap");tt.onclick=()=>openSheet({kind:"edit",entry:r.e,amount:r.e.amount,cat:r.e.cat,note:r.e.note,date:r.e.date,acct:r.e.acct});
-      el.querySelector(".del").onclick=async()=>{if(!await confirmBox(`Delete +${peso2(r.e.amount)}${r.e.note?" · "+r.e.note:""}?`,"This removes it from your income and your Google Sheet."))return;try{await call("delete",{id:r.e.id});toast("Deleted")}catch(x){toast("Couldn't delete. Try again.")}};}
+      el.querySelector(".del").onclick=async()=>{if(!await confirmBox(`Delete +${peso2(r.e.amount)}${r.e.note?" · "+r.e.note:""}?`,"This removes it from your income."))return;try{await call("delete",{id:r.e.id});toast("Deleted")}catch(x){toast("Couldn't delete. Try again.")}};}
     box.appendChild(el)});
   const t=$("incTotal"); t.querySelector("strong").textContent="+"+peso2(p.income+extra);
   t.querySelector(".small").textContent=extra?`${peso2(extra)} extra income logged`:"Log refunds, gifts or side income with + → Income";
@@ -666,10 +677,19 @@ function render(){
     if(onPay) r.querySelector(".paybtn").onclick=()=>{closeUpcoming();onPay()}; return r};
   [...new Set(config.debts.map(d=>d.lender))].forEach(L=>{
     const mm=firstUnpaid(L,paidCards,config.credits||[]), dm=mAdd(mm,1);
-    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)); if(!ds.length) return;
-    const credit=sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount), amt=sum(ds,d=>d.monthly)-credit;
-    const [dy,dmo]=dm.split("-").map(Number), date=new Date(dy,dmo-1,ds[0].dueDay);
-    ups.push({date,make:()=>mkRow(/card$/i.test(L)?L:L+" card","Due "+dName(date)+" · "+ds.map(d=>d.name).join(", ")+(credit?` · ${peso(credit)} credit applied`:""),amt,
+    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)), oth=otherOwed(L); if(!ds.length&&oth<=0.009) return;
+    const credit=ds.length?sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount):0, amt=Math.max(0,sum(ds,d=>d.monthly)-credit)+oth;
+    const [dy,dmo]=dm.split("-").map(Number), date=new Date(dy,dmo-1,(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1);
+    const nd=nextCardDue(L), cname=/card$/i.test(L)?L:L+" card";
+    if(oth>0.009&&ds.length&&ymd(date)>ymd(nd)){
+      ups.push({date:nd,make:()=>mkRow(cname,"Due "+dName(nd)+" · subscriptions and purchases (installments already paid)",oth,
+        ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+lenderCard(L),acct:mainAcc().id,amount:oth,note:L+" card payment",lender:L}))});
+      const inst=Math.max(0,sum(ds,d=>d.monthly)-credit);
+      if(inst>0.009) ups.push({date,make:()=>mkRow(cname,"Due "+dName(date)+" · "+ds.map(d=>d.name).join(", ")+(credit?` · ${peso(credit)} credit applied`:""),inst,
+        ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+lenderCard(L),acct:mainAcc().id,amount:Math.round(inst*100)/100,note:L+" card payment",lender:L,month:dm}))});
+      return;
+    }
+    ups.push({date,make:()=>mkRow(/card$/i.test(L)?L:L+" card","Due "+dName(date)+" · "+[...ds.map(d=>d.name),...(oth>0.009?[peso(oth)+" subscriptions and purchases"]:[])].join(", ")+(credit?` · ${peso(credit)} credit applied`:""),amt,
       ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+lenderCard(L),acct:mainAcc().id,amount:Math.round(amt*100)/100,note:L+" card payment",lender:L,month:dm}))});
   });
   (config.cards||[]).filter(c=>c.statement&&c.statementDue&&c.paidStmt!==c.statementDue).forEach(c=>{
@@ -713,7 +733,7 @@ function render(){
     const tt=r.querySelector(".t"); tt.classList.add("tap"); tt.setAttribute("role","button"); tt.tabIndex=0;
     tt.onclick=()=>openSheet({kind:"edit",entry:e,amount:e.amount,cat:e.cat,note:e.note,date:e.date,acct:e.acct,ref:e.ref});
     r.querySelector("button").onclick=async()=>{
-      const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget and your Google Sheet.");
+      const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget.");
       if(!ok) return;
       try{await call("delete",{id:e.id});const u=undoPaymentPatch(e.id);if(u)await call("setConfig",{patch:u});toast("Deleted")}catch(err){toast("Couldn't delete. Try again.")}};
     list.appendChild(r);
@@ -835,15 +855,16 @@ function renderAccounts(){
   [...new Set(config.debts.map(d=>d.lender))].forEach(L=>{
     const card=(config.cards||[]).find(c=>c.lender===L)||(config.cards||[]).find(c=>c.name.toLowerCase().startsWith(L.toLowerCase()));
     if(card&&card.start!=null) return;
-    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,m)); if(!ds.length) return;
-    const left=sum(ds,d=>{const n=Math.min(d.total,d.current+Math.max(0,mDiff(config.startMonth,m)));return (d.total-n+1)*d.monthly})
+    const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,m)), oth=otherOwed(L); if(!ds.length&&oth<=0.009) return;
+    const left=oth+sum(ds,d=>{const n=Math.min(d.total,d.current+Math.max(0,mDiff(config.startMonth,m)));return (d.total-n+1)*d.monthly})
       -sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
     instTotal+=Math.max(0,left);
-    const mm=firstUnpaid(L,config.paidCards||{},config.credits||[]), due=Math.max(0,monthDue(L,mm,config.credits||[])), dm=mAdd(mm,1), [dy,dmo]=dm.split("-").map(Number);
+    const mm=firstUnpaid(L,config.paidCards||{},config.credits||[]), due=Math.max(0,ds.length?monthDue(L,mm,config.credits||[]):0)+oth, dm=mAdd(mm,1), [dy,dmo]=dm.split("-").map(Number);
     const dd=new Date(dy,dmo-1,(ds[0]||{}).dueDay||1), cred=sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
     const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill info">Installments</span><strong></strong>';
     r.querySelector("strong").textContent=card?card.name:(/card$/i.test(L)?L:L+" card");
-    r.querySelector(".t .small").textContent=`Next ${peso(due)} due ${dName(dd)} · ${ds.length} installment${ds.length>1?"s":""}`+(cred?` · ${peso(cred)} credit`:"");
+    const nd=nextCardDue(L), split=oth>0.009&&ds.length&&ymd(dd)>ymd(nd);
+    r.querySelector(".t .small").textContent=split?`${peso(oth)} subscriptions and purchases due ${dName(nd)} · next installments ${peso(due-oth)} ${dName(dd)}`+(cred?` · ${peso(cred)} credit`:""):`Next ${peso(due)} due ${dName(dd)} · ${ds.length} installment${ds.length===1?"":"s"}`+(oth>0.009?` + ${peso(oth)} subscriptions and purchases`:"")+(cred?` · ${peso(cred)} credit`:"");
     r.lastChild.textContent=peso2(Math.max(0,left)); cl.appendChild(r)});
   cc.querySelector(".pill.warn").textContent=peso2(sum(cards,c=>c.owed)+instTotal)+" owed";
 }
@@ -1141,7 +1162,7 @@ async function load(){
   store=await idbGet("state");
   if(!store||!store.config){ $("skel").hidden=true; startOnboarding(); return; }
   store.expenses=store.expenses||[]; store.paydays=store.paydays||{};
-  if(ensureCash(store.config)) await persist();
+  let ch=ensureCash(store.config); (store.config.cards||[]).forEach(c=>{if(c.lender&&!c.otherFrom){c.otherFrom=ymd(new Date());ch=true}}); if(ch) await persist();
   apply(store);
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 }
@@ -1182,7 +1203,7 @@ const F={
   debts:[{k:"name",label:"Item",type:"text",ph:"e.g. Phone"},{k:"monthly",label:"Monthly (₱)",type:"num",ph:"0",half:true},{k:"lender",label:"Card / lender",type:"text",ph:"e.g. BPI card",half:true},
     {k:"current",label:"Payment # this month",type:"num",ph:"e.g. 3",half:true},{k:"total",label:"Total payments",type:"num",ph:"e.g. 12",half:true},{k:"dueDay",label:"Due day",type:"num",ph:"e.g. 5",half:true}],
   cards:[{k:"name",label:"Credit card",type:"text",ph:"e.g. Maya Credit Card"},{k:"balance",label:"Balance owed now (₱)",type:"num",ph:"0",half:true},{k:"dueDay",label:"Due day",type:"num",ph:"e.g. 16",half:true}],
-  subs:[{k:"name",label:"Subscription",type:"text",ph:"e.g. Netflix"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0"}]
+  subs:[{k:"name",label:"Subscription",type:"text",ph:"e.g. Netflix"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0",half:true},{k:"card",label:"Charged to",type:"select",half:true,opts:()=>[{v:"",t:"Paid directly"},...(config&&config.cards||[]).filter(c=>c.lender).map(c=>({v:c.id,t:c.short||c.name}))]}]
 };
 const DEFAULT_SPEND=[{name:"Food & Groceries",amount:6000},{name:"Household",amount:1000},{name:"Transportation",amount:1500},{name:"Personal",amount:1000},{name:"Dining Out",amount:1500}];
 const KNOWN_IDS={"food & groceries":"groceries","dining out":"foodout","transportation":"transport","household":"household","personal":"personal"};
@@ -1311,7 +1332,7 @@ function renderManage(){
       openManage("Credit cards","Balance owed now. Changing it resets tracking for that card from today.",b=>listEditor(b,d,F.cards,"Add credit card",{name:"",balance:"",dueDay:""}),
       async()=>{await call("setConfig",{patch:{cards:buildCards(d,config.debts,CARDS().map(c=>({...c,_owed:B[c.id]?.owed})))}})})}],
     ["Subscriptions",config.subs.map(x=>x.name).join(", ")||"None",()=>{const d=config.subs.map(x=>({...x}));
-      openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>({name:x.name.trim(),amount:n2(x.amount)}))}})})}],
+      openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>{const old=(config.subs||[]).find(o=>o.name===x.name.trim()&&o.card===x.card);return x.card?{name:x.name.trim(),amount:n2(x.amount),card:x.card,from:old&&old.from||mkey(new Date())}:{name:x.name.trim(),amount:n2(x.amount)}})}})})}],
   ];
   const grp={"You & pay":"mg-you","Accounts & wallets":"mg-money","Credit cards":"mg-money","Installments & loans":"mg-money","Spending categories":"mg-budget","Bills":"mg-budget","Subscriptions":"mg-budget"};
   rows.forEach(([t,sub,fn])=>{const L=$(grp[t]||"mg-budget");const r=document.createElement("button");r.type="button";r.className="item mgrow";r.innerHTML='<span class="t"><strong></strong><span class="small muted"></span></span><span></span><span class="chev">›</span>';
