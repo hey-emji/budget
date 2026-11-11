@@ -493,8 +493,9 @@ const isAcc=id=>ACC().some(a=>a.id===id);
 const vicesCat=()=>config&&config.cigPlan&&config.cigPlan.length?(config.vicesCat||"personal"):"__none";
 const lenderCard=L=>(CARDS().find(c=>c.lender===L)||{}).id;
 const LCARDS=()=>Object.fromEntries(CARDS().filter(c=>c.lender).map(c=>[c.id,c.lender]));
-const PAYW=()=>[...ACC().map(a=>({id:a.id,name:a.name})),{id:"cash",name:"Cash"},...CARDS().map(c=>({id:c.id,name:c.short||c.name}))];
-const GOES=()=>[...ACC().map(a=>({id:a.id,name:a.name})),{id:"cash",name:"Cash"}];
+const hasCash=()=>ACC().some(a=>a.id==="cash");
+const PAYW=()=>[...ACC().map(a=>({id:a.id,name:a.name})),...(hasCash()?[]:[{id:"cash",name:"Cash"}]),...CARDS().map(c=>({id:c.id,name:c.short||c.name}))];
+const GOES=()=>[...ACC().map(a=>({id:a.id,name:a.name})),...(hasCash()?[]:[{id:"cash",name:"Cash"}])];
 const XFROM=GOES;
 const XTO=()=>[...ACC().map(a=>({id:"to-"+a.id,name:a.name})),...CARDS().map(c=>({id:"to-"+c.id,name:c.short||c.name}))];
 const acctName=id=>(PAYW().find(a=>a.id===id)||{name:id==="cash"?"Cash":id}).name;
@@ -1027,11 +1028,15 @@ async function load(){
   store=await idbGet("state");
   if(!store||!store.config){ $("skel").hidden=true; startOnboarding(); return; }
   store.expenses=store.expenses||[]; store.paydays=store.paydays||{};
+  if(ensureCash(store.config)) await persist();
   apply(store);
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 }
 
 /* ---------- helpers ---------- */
+function ensureCash(c){ if(!c) return false; c.accounts=c.accounts||[];
+  if(c.accounts.some(a=>a.id==="cash"||String(a.name||"").trim().toLowerCase()==="cash")) return false;
+  c.accounts.push({id:"cash",name:"Cash",note:"Cash on hand",spendable:true,start:0,startDate:ymd(new Date()),startTs:new Date().toISOString()}); return true; }
 const slug=t=>String(t||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,24)||"x";
 const uid=p=>p+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const ord=n=>n+(["th","st","nd","rd"][((n%100)-20)%10]||["th","st","nd","rd"][n%100]||"th");
@@ -1095,7 +1100,7 @@ function buildCards(revolving,debts,prev){const today=ymd(new Date()), ts=new Da
 /* ---------- onboarding ---------- */
 let onb=null;
 function startOnboarding(){
-  onb={i:0,name:"",income:"",accounts:[{name:"Main account",balance:"",spendable:true},{name:"Savings",balance:"",spendable:false}],salaryTo:0,
+  onb={i:0,name:"",income:"",accounts:[{name:"Main account",balance:"",spendable:true},{name:"Savings",balance:"",spendable:false},{id:"cash",name:"Cash",balance:"",spendable:true}],salaryTo:0,
     spend:JSON.parse(JSON.stringify(DEFAULT_SPEND)),bills:[{name:"Electricity",amount:"",dueDay:""},{name:"Water",amount:"",dueDay:""},{name:"Internet",amount:"",dueDay:""}],
     debts:[],cards:[],subs:[]};
   $("onb").hidden=false; document.body.classList.add("onbopen"); drawOnb();
@@ -1129,6 +1134,7 @@ function onbConfig(){
   const sm=mkey(new Date()), accounts=buildAccounts(onb.accounts,[]); if(!accounts.length) accounts.push({id:"acc-main",name:"Main account",spendable:true,start:0,startDate:ymd(new Date())});
   const named=onb.accounts.filter(a=>String(a.name||"").trim()); const salAcc=accounts[Math.min(onb.salaryTo,accounts.length-1)]||accounts[0];
   const debts=normalizeDebts(buildDebts(onb.debts,sm),sm);
+  ensureCash({accounts});
   return {app:"bujjet",v:1,name:String(onb.name||"").trim(),startMonth:sm,incomePerPayday:n2(onb.income),accounts,salaryTo:salAcc.id,
     spend:buildSpend(onb.spend),bills:buildBills(onb.bills.filter(b=>Number(b.amount)>0),[]),debts,cards:buildCards(onb.cards,debts,[]),
     subs:onb.subs.filter(x=>String(x.name||"").trim()&&Number(x.amount)>0).map(x=>({name:x.name.trim(),amount:n2(x.amount)})),
@@ -1243,7 +1249,7 @@ $("importFile").onchange=async ev=>{const f=ev.target.files[0]; ev.target.value=
       try{j=await decryptJSON(j,pw)}catch(e){toast("Wrong password");return}}
     const st=j.state||j; if(!st||!st.config){toast("That file isn't a bujjet backup");return}
     if(store&&store.config&&!(await confirmBox("Replace data on this phone?","Importing replaces everything currently on this phone with the backup.",{yes:"Replace"}))) return;
-    store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{}}; await persist();
+    store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{}}; ensureCash(store.config); await persist();
     $("onb").hidden=true; document.body.classList.remove("onbopen"); apply(store); toast("Backup imported");
   }catch(e){toast("Couldn't read that file")}
 };
