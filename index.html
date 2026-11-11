@@ -158,6 +158,11 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .ibx:first-child{border-top:none}.ibx .amt{font-weight:700;text-align:right}.ibx .acts{grid-column:1/-1;display:flex;gap:8px}
 .ibx .acts button{padding:7px 12px;font-size:13px}
 .clipcard{display:grid;gap:10px;border-color:var(--accent)}
+.busy{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:grid;place-items:center}
+.busy[hidden]{display:none}
+.busybox{background:var(--surface);color:var(--ink);border-radius:18px;padding:18px 22px;display:flex;align-items:center;gap:12px;font:600 15px var(--body)}
+.spin{width:20px;height:20px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -443,6 +448,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   </div>
   <button class="primary" type="submit" id="addBtn">Save</button>
 </form>
+<div class="busy" id="busy" hidden role="status" aria-live="polite"><div class="busybox"><span class="spin"></span><span id="busyText">Working…</span></div></div>
 <div class="backdrop" id="pasteBack" hidden></div>
 <div class="dialog" id="pasteDlg" role="dialog" aria-modal="true" aria-labelledby="pasteTitle" hidden>
   <h2 id="pasteTitle">Paste a bank message</h2>
@@ -1735,10 +1741,16 @@ $("importFile").onchange=async ev=>{const f=ev.target.files[0]; ev.target.value=
       try{j=await decryptJSON(j,pw)}catch(e){toast("Wrong password");return}}
     const st=j.state||j; if(!st||!st.config){toast("That file isn't a bujjet backup");return}
     if(store&&store.config&&!(await confirmBox("Replace data on this phone?","Importing replaces everything currently on this phone with the backup.",{yes:"Replace"}))) return;
-    store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{}}; ensureCash(store.config); await persist();
-    $("onb").hidden=true; document.body.classList.remove("onbopen"); apply(store); toast("Backup imported");
-  }catch(e){toast("Couldn't read that file")}
+    showBusy("Importing your backup…"); const t0=Date.now();
+    store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{},inbox:st.inbox||[]}; ensureCash(store.config); await persist();
+    await new Promise(r=>setTimeout(r,Math.max(0,1400-(Date.now()-t0))));
+    $("onb").hidden=true; document.body.classList.remove("onbopen"); apply(store); hideBusy();
+    const nA=(store.config.accounts||[]).length, nE=store.expenses.length;
+    await confirmBox("Backup imported",`Your data is ready${store.config.name?", "+store.config.name:""}: ${nA} account${nA===1?"":"s"} and ${nE} logged entr${nE===1?"y":"ies"}.`,{yes:"Done",ok:true});
+  }catch(e){hideBusy();toast("Couldn't read that file")}
 };
+function showBusy(t){ $("busyText").textContent=t||"Working…"; $("busy").hidden=false; }
+function hideBusy(){ $("busy").hidden=true; }
 $("eraseBtn").onclick=async()=>{if(!(await confirmBox("Erase everything?","This deletes all your bujjet data on this phone. Export a backup first if you want to keep it.",{yes:"Erase"})))return;
   try{await idbSet("state",null);localStorage.removeItem("bujjet.state")}catch(e){} location.reload()};
 
