@@ -40,6 +40,20 @@ jobs:
           </application>'''
           if 'NotifService' not in s:
               s=s.replace('</application>',svc,1)
+          filt='''<intent-filter android:label="Log to bujjet">
+                      <action android:name="android.intent.action.PROCESS_TEXT" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="text/plain" />
+                  </intent-filter>
+                  <intent-filter android:label="Log to bujjet">
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="text/plain" />
+                  </intent-filter>
+              </activity>'''
+          if 'PROCESS_TEXT' not in s:
+              i=s.index('.MainActivity'); j=s.index('</activity>',i)
+              s=s[:j]+filt+s[j+len('</activity>'):]
           open(p,'w').write(s)
           PY
       - name: App icon

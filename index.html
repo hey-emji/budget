@@ -1255,10 +1255,12 @@ function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INB
     no.onclick=async()=>{ await dropInbox(it.id); toast("Dismissed"); };
     host.appendChild(d); }); }
 /* ---------- automatic detection (Android app) ---------- */
+function closeAllForPick(){ try{ if(curView==="prefs") closePrefs(); closeIns(); closeManage(); }catch(e){} }
 const SMS_APP=/messag|mms|sms|\.mms|conversations/i;
 async function pullCaptured(){ if(!NR||!store||!store.config) return; let r; try{ r=await NR.takePending(); }catch(e){ return; }
   const items=(r&&r.items)||[], found=[];
   for(const it of items){ const title=String(it.title||""), body=String(it.text||"");
+    if(it.pkg==="bujjet.selection"){ const m=parseMessage(body)||parseReceipt(body); closeAllForPick(); openSheet(); fillFromReading(m,"paste"); if(m) $("readNote").textContent="Read from the text you selected"+(m.source?" ("+m.source+")":"")+". Check it, then save."; continue; }
     if(SMS_APP.test(it.pkg||"")&&!PH_SOURCES.some(([,re])=>re.test(title))&&!/^[A-Z0-9]{2,12}$/.test(title)) continue; // SMS only from bank-style senders, not people
     const m=parseMessage(title+". "+body,{hint:(it.app||"")+" "+title}); if(!m) continue;
     if(!m.date&&it.time) m.date=ymd(new Date(Number(it.time))); m.via=it.app||""; found.push(m); }
