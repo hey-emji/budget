@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "description": "bujjet Android app (Capacitor wrapper around the same index.html as bujjet.com)",
   "scripts": {
-    "www": "rm -rf www && mkdir www && cp index.html manifest.json privacy.html terms.html icon-192.png icon-512.png icon-maskable.png www/"
+    "www": "rm -rf www && mkdir www && cp index.html manifest.json privacy.html terms.html icon-192.png icon-512.png icon-maskable.png www/ && cp node_modules/@capacitor/core/dist/capacitor.js www/ && sed -i '0,/<script>/s//<script src=\"capacitor.js\"><\\/script>\\n<script>/' www/index.html && grep -c 'capacitor.js' www/index.html"
   }
 }

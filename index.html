@@ -477,7 +477,8 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 <script>
 /* ---------- running inside the Android app? ---------- */
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
-const NR=NATIVE&&window.Capacitor.registerPlugin?window.Capacitor.registerPlugin("NotifReader"):null;
+const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
+  if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
 
 const $=id=>document.getElementById(id);
 const peso=n=>(n<0?"−":"")+"₱"+Math.abs(n).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -1626,7 +1627,7 @@ function renderManage(){ if(NR) setTimeout(refreshAuto,0);
     ["Name",config.name||"Add your name",()=>openManage("Your name","Used for greetings.",b=>{b.innerHTML=`<div class="onbform"><label><span class="small muted">Name</span><input id="mName" autocomplete="given-name"></label></div>`;$("mName").value=config.name||""},
       async()=>{await call("setConfig",{patch:{name:$("mName").value.trim().slice(0,40)}})})],
     ["Google account",googleSub(),openGoogle],
-    ...(NR?[["Detect transactions",window._autoOn?"On · reading bank and wallet notifications":"Off · tap to turn on",openAuto]]:[]),
+    ...(NR?[["Detect transactions",window._autoOn?"On · reading bank and wallet notifications":"Off · tap to turn on",openAuto]]:NATIVE?[["Detect transactions","Not available in this version. Update the app.",()=>toast("Install the latest bujjet test build")]]:[]),
     ["Pay",`${peso(config.incomePerPayday)} per payday · 15th and 30th`,()=>openManage("Your pay","Take-home pay you expect each payday. You can still enter the actual amount on each payday in the Paydays tab.",b=>{b.innerHTML=`<div class="onbform"><label><span class="small muted">Take-home pay per payday (₱)</span><input id="mInc" inputmode="decimal"></label></div>`;$("mInc").value=config.incomePerPayday},
       async()=>{const inc=n2($("mInc").value);if(!(inc>0))throw new Error("Enter your pay per payday");await call("setConfig",{patch:{incomePerPayday:inc}})})],
     ["Accounts & wallets",ACC().map(a=>a.name).join(", ")||"None",()=>{const d=ACC().map(a=>({id:a.id,name:a.name,balance:Math.round(B[a.id].bal*100)/100,spendable:a.spendable!==false}));
