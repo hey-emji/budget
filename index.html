@@ -211,6 +211,7 @@ body.onbopen nav,body.onbopen main{display:none}
 .ledf.chk{display:flex;align-items:center;gap:8px;padding-bottom:10px}.ledf.chk input{width:20px;height:20px;accent-color:var(--accent)}
 .mgdlg{max-height:86vh;overflow:auto;width:min(460px,calc(100% - 24px))}
 #mgDlg{z-index:33}#mgBack{z-index:32}#pwDlg{z-index:36}#pwBack{z-index:35}
+#pwDlg{z-index:56}#pwBack{z-index:55}#dlg{z-index:58}#dlgBack{z-index:57}#toast{z-index:60}
 .mgrow{width:100%;background:none;border:none;border-top:1px solid var(--line);text-align:left;color:var(--ink);font:inherit;cursor:pointer;grid-template-columns:1fr auto 16px}
 .mgrow:first-child{border-top:none}.chev{color:var(--muted);font-size:20px}
 select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
@@ -347,7 +348,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <div class="small muted" id="backupInfo"></div>
       <div class="inline"><button class="primary" type="button" id="exportBtn">Save backup file</button><button class="secondary" type="button" id="shareBtn">Share backup…</button></div>
       <button class="secondary" type="button" id="importBtn">Import backup</button>
-      <input type="file" id="importFile" accept=".bujjet,.json,application/json" hidden>
+      <input type="file" id="importFile" hidden>
       <button class="ghost" type="button" id="eraseBtn" style="justify-self:start;color:var(--bad)">Erase all data on this phone</button>
     </div>
       <div class="card"><h2>About</h2>
