@@ -1,0 +1,6 @@
+{
+  "appId": "com.bujjet.app",
+  "appName": "bujjet",
+  "webDir": "www",
+  "android": { "backgroundColor": "#0e0e0e" }
+}

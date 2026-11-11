@@ -1,0 +1,9 @@
+{
+  "name": "bujjet",
+  "private": true,
+  "version": "0.1.0",
+  "description": "bujjet Android app (Capacitor wrapper around the same index.html as bujjet.com)",
+  "scripts": {
+    "www": "rm -rf www && mkdir www && cp index.html manifest.json privacy.html terms.html icon-192.png icon-512.png icon-maskable.png www/"
+  }
+}

@@ -1,0 +1,59 @@
+name: Android app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["index.html", "native/**", "capacitor.config.json", "package.json", ".github/workflows/android.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: Install Capacitor
+        run: npm install --no-audit --no-fund @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+      - name: Prepare web files
+        run: npm run www
+      - name: Create Android project
+        run: npx cap add android
+      - name: Add notification reader
+        run: |
+          set -e
+          SRC=android/app/src/main/java/com/bujjet/app
+          mkdir -p $SRC
+          cp native/java/*.java $SRC/
+          python3 - <<'PY'
+          p='android/app/src/main/AndroidManifest.xml'
+          s=open(p).read()
+          svc='''        <service android:name=".NotifService" android:label="bujjet" android:exported="true"
+                  android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+                  <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+              </service>
+          </application>'''
+          if 'NotifService' not in s:
+              s=s.replace('</application>',svc,1)
+          open(p,'w').write(s)
+          PY
+      - name: App icon
+        continue-on-error: true
+        run: |
+          mkdir -p assets && cp icon-512.png assets/icon.png && cp icon-512.png assets/icon-only.png
+          npx --yes @capacitor/assets generate --android --iconBackgroundColor '#0e0e0e' --iconBackgroundColorDark '#0e0e0e'
+      - name: Sync
+        run: npx cap sync android
+      - name: Build APK
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Publish test APK
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk bujjet-test.apk
+          gh release delete android-test --yes --cleanup-tag || true
+          gh release create android-test bujjet-test.apk --title "bujjet Android test build" --notes "Test build from ${GITHUB_SHA::7}. Install on Android to try automatic transaction detection." --prerelease
