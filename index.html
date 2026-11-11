@@ -133,10 +133,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .gear{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
 .gear svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .prefhead{display:grid;grid-template-columns:40px 1fr 40px;align-items:center}.preftitle{font-size:22px;text-align:center;margin:0}
-.prefslink{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:14px 16px;color:var(--ink);font:inherit;cursor:pointer}
-.prefslink .ic{width:38px;height:38px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
-.prefslink .ic svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.prefslink .tx{flex:1;min-width:0;display:grid;gap:2px}.prefslink .tx strong{font-size:16px}.prefslink .chev{color:var(--muted);font-size:22px}
+.prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
 #upDlg{z-index:29}#upBack{z-index:28}
@@ -332,7 +329,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <button class="primary" type="submit">Save changes</button>
       <div class="small muted">When a paycheck is short, categories are trimmed from the bottom of the list up. Cards and bills are always covered first.</div>
       </form>
-    <button class="prefslink" type="button" id="toPrefs"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span><span class="tx"><strong>Settings</strong><span class="small muted">Accounts, cards, bills, subscriptions and backup</span></span><span class="chev">›</span></button>
+    <button class="prefslink" type="button" id="toPrefs">Accounts, cards, bills and backup are in <span>Settings ›</span></button>
   </section>
 
   <!-- PREFERENCES / SETTINGS PAGE -->
