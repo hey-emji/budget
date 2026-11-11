@@ -1111,7 +1111,7 @@ function renderIns(){
 }
 /*PARSER-START*/
 /* ---------- message + receipt reading (all on this phone) ---------- */
-const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank/i],["SeaBank",/sea ?bank/i],
+const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank|maricard/i],["SeaBank",/sea ?bank/i],
   ["GoTyme",/go ?tyme/i],["Security Bank",/security ?bank/i],["RCBC",/\brcbc\b|diskartech/i],["Landbank",/land ?bank/i],["PNB",/\bpnb\b/i],["Chinabank",/china ?bank/i],["EastWest",/east ?west/i],
   ["ShopeePay",/shopee ?pay|spaylater/i],["GrabPay",/grab ?pay/i],["Tonik",/\btonik\b/i],["CIMB",/\bcimb\b/i],["Coins.ph",/coins\.ph/i],["AUB",/\baub\b/i],["PSBank",/psbank/i],["Citi",/\bciti(bank)?\b/i]];
 const NUM="(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)";
@@ -1132,7 +1132,7 @@ const CAT_HINTS=[
   ["household",/hardware|wilcon|handyman|ace home|true ?value|ikea|our home|mr\.? ?diy|daiso|japan home|home ?depot|landmark|sm home|cleaning|laundry/i],
   ["personal",/watsons|mercury ?drug|southstar|rose ?pharmacy|generika|the generics|pharmacy|salon|barber|uniqlo|h&m|penshoppe|bench|cigar|marlboro|vape|clinic|dental|optical/i],
   ["bills",/meralco|maynilad|manila ?water|pldt|converge|globe ?(at ?home|postpaid)?|smart ?(postpaid|bro)?|\bdito\b|sky ?(cable|fiber)|cignal|bayad|electric|water district|association dues|hoa|insurance|philhealth|sss|pag-?ibig/i],
-  ["subs",/netflix|spotify|youtube|apple\.com|icloud|google ?(one|play)|hbo|disney|viu|prime video|claude|openai|chatgpt|canva/i]];
+  ["subs",/netflix|spotify|youtube|apple\.com|icloud|google ?(one|play)|hbo|disney|viu|prime video|claude|openai|chatgpt|canva|hostinger|namecheap|godaddy|adobe|microsoft/i]];
 const CAT_NAME_RE={food:/food|grocer/i,dining:/dining|eat|resto/i,transport:/transpo/i,household:/house|home/i,personal:/personal/i};
 function guessCat(t,cats){ for(const [k,re] of CAT_HINTS){ if(!re.test(t)) continue;
     if(k==="bills"||k==="subs"){ const u=cats.find(c=>c.id==="utilities"); if(u) return u.id; continue; }
@@ -1145,17 +1145,21 @@ function cleanName(s){return String(s||"").replace(/\s+/g," ").replace(/^[\s:,-]
 function parseMessage(raw,opts){opts=opts||{}; const text=String(raw||"").replace(/ /g," ").trim(); if(!text) return null;
   // drop balance / limit figures so they aren't mistaken for the amount
   const t=text.replace(/(?:avail(?:able)?\.?|remaining|new|current|running|outstanding|ending|wallet)?\s*(?:bal(?:ance)?\.?|credit limit|limit)\s*(?:is|of|:)?\s*(?:PHP|Php|₱|P)\s?[\d,]+(?:\.\d{1,2})?/gi," ");
-  const amts=[...t.matchAll(AMT_RE)].map(m=>({v:toNum(m[1]),i:m.index})).filter(a=>a.v>0&&a.v<10000000);
+  let amts=[...t.matchAll(AMT_RE)].map(m=>({v:toNum(m[1]),i:m.index})).filter(a=>a.v>0&&a.v<10000000);
+  if(!amts.length){ const m2=t.match(/\b(?:received|sent|paid|payment of|amount(?: withdrawn| paid)?|transaction of|withdrawn|transferred)\s*:?\s*(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})(?!\d)/i); if(m2) amts=[{v:toNum(m2[1]),i:m2.index}]; }
   if(!amts.length) return null;
   const low=t.toLowerCase();
+  const promo=/\b(promo|register|earn|egcs?|t&cs?|t&c|min\.? (accum\.? )?spend|discount|% off|voucher|cashback|rewards?|win up to|sale|deals?|offer)\b/.test(low);
   const inc=/\b(received|you('ve| have)? got|credited|cash[- ]?in|deposit(ed)?|incoming|refund(ed)?|reversal|salary|payroll|sent you)\b/.test(low);
-  const out=/\b(you('ve| have)? (sent|paid|transferred)|paid|purchase[ds]?|debited|spent|charged|payment (to|for|of)|withdraw(n|al)?|cash[- ]?out|bought|bills? payment|sent)\b/.test(low);
+  const out=/\b(you('ve| have)?( successfully)? (sent|paid|transferred)|paid|purchase[ds]?|debited|spent|charged|payment (to|for|of)|withdraw(n|al)?|cash[- ]?out|bought|bills? payment|sent|transaction of|debit (card )?transaction|amount withdrawn)\b/.test(low);
+  if(!(out||inc)) return null;
+  if(promo&&!/\b(you('ve| have)?( successfully)? (sent|paid|received|transferred)|was (completed|successful|charged)|has been (completed|credited|debited)|your payment|amount withdrawn)\b/.test(low)) return null;
   const type=inc&&!/\b(you('ve| have)? (sent|paid)|purchase|debited|spent|charged)\b/.test(low)?"income":"expense";
   const amount=amts[0].v;
-  let who=null, m=t.match(/\b(?:at|to|from|for|merchant:?|paid to|sent to|received from)\s+([A-Z0-9][A-Za-z0-9&'.\-* ]{1,40}?)(?=\s+(?:on|for|with|using|via|thru|through|ref|amount|worth|has|was|is|at|from)\b|\s*[.,;:(]|\s*$)/);
-  if(m&&!/^(PHP|Php|P|₱|your|you|the|a|an|account|acct|card|ending)$/i.test(m[1].trim())) who=cleanName(m[1]);
+  let who=null, m=t.match(/\b(?:at|to|from|for|merchant:?|paid to|sent to|received from)\s+([A-Za-z0-9][A-Za-z0-9&'.\-* ]{1,40}?)(?=\s+(?:on|for|with|using|via|thru|through|ref|amount|worth|has|was|is|at|from)\b|\s*[.,;:(]|\s*$)/);
+  if(m&&!/^(PHP|Php|P|₱|your|you|the|a|an|account|acct|card|ending|us|unauthorized|use|least|be|claim)\b/i.test(m[1].trim())) who=cleanName(m[1]);
   const ref=(t.match(/\bref(?:erence)?\.?\s*(?:no\.?|number|#)?\s*:?\s*([A-Z0-9]{6,})/i)||[])[1]||"";
-  const src=PH_SOURCES.find(([,re])=>re.test(text));
+  let src=PH_SOURCES.find(([,re])=>re.test(text)); if(!src&&/^UB\d/i.test(ref)) src=["UnionBank"];
   return {type,amount,who,source:src?src[0]:"",ref,date:findDate(text)||null,text:text.slice(0,400),sure:out||inc};
 }
 // Read a receipt's text (from the camera). Finds the total, the store and the date.
@@ -1173,14 +1177,24 @@ function parseReceipt(raw){const lines=String(raw||"").split(/\r?\n/).map(l=>l.t
   return {type:"expense",amount:Math.round(total*100)/100,who:store||null,source:"",ref:"",date:findDate(lines.join(" "))||null,text:lines.slice(0,12).join("\n").slice(0,400),sure:true,receipt:true};
 }
 /*PARSER-END*/
+const tok=s=>String(s||"").toLowerCase().replace(/\bcc\b/g,"credit card").replace(/[^a-z0-9 ]/g," ").split(/\s+/).filter(w=>w.length>1).map(w=>w.replace(/s$/,""));
+// Does the name in a message match one of your own accounts or cards? Returns its "to-…" id.
+function ownTarget(who,from){ if(!who) return null; const w=tok(who); if(!w.length) return null; let best=null,bs=0;
+  XTO().forEach(a=>{ if(a.id.slice(3)===from) return; const n=tok(a.name); if(!n.length||n[0]!==w[0]&&!w.includes(n[0])) return; const sc=n.filter(x=>w.includes(x)).length/n.length; if(sc>bs){bs=sc;best=a.id} });
+  return bs>=0.6?best:null; }
+function isSelf(who){ if(!who) return false; const w=tok(who), names=[config&&config.name,(syncMeta()||{}).gname].filter(Boolean).map(tok);
+  return names.some(n=>n.length&&n.filter(x=>w.includes(x)).length>=Math.min(2,n.length)); }
 function cleanWho(r){return r.who&&!/\*{2,}/.test(r.who)?r.who:(r.who||"")}
 // Turn a reading into what the log sheet needs
 function readingToPre(r,extra){ const cats=CATS().filter(c=>c.id!=="credit"), blob=[r.who,r.text].filter(Boolean).join(" ");
   const acct=guessAcct(r.source+" "+blob,PAYW())||undefined;
   let mode=r.type==="income"?"inc":"exp", cat=mode==="inc"?(/refund|reversal/i.test(blob)?"inc-refund":/salary|payroll|bonus|13th/i.test(blob)?"inc-bonus":"inc-other"):guessCat(blob,cats), to;
-  if(mode==="exp"&&/\b(transferr?ed|transfer|instapay|pesonet|fund transfer|cash ?in)\b/i.test(r.text)){ const own=XTO().find(a=>a.id.slice(3)!==acct&&r.who&&new RegExp(String(a.name).split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i").test(r.who)); if(own){mode="xfer";to=own.id;} }
+  if(mode==="exp"){ const own=ownTarget(r.who,acct);
+    if(own){mode="xfer";to=own;}
+    else if(/withdraw|cash[- ]?out|atm/i.test(r.text)&&!/withdraw(al)? fee/i.test(r.text)){mode="xfer";to="to-cash";}
+    else if(isSelf(r.who)&&/instapay|pesonet|transfer|sent/i.test(r.text)){ const m=mainAcc(); const t=m&&m.id!==acct?m.id:(ACC().find(a=>a.id!==acct)||{}).id; if(t){mode="xfer";to="to-"+t;} } }
   if(mode==="inc"&&!INC.some(c=>c.id===cat)) cat=INC[0].id;
-  const who=cleanWho(r); const note=(r.receipt?who:(who?(mode==="inc"?"From ":"")+who:r.source)).slice(0,80);
+  const who=cleanWho(r); const note=mode==="xfer"?"":(r.receipt?who:(who?(mode==="inc"?"From ":"")+who:r.source)).slice(0,80);
   return {kind:"read",mode,cat,to,acct,amount:r.amount,note,date:r.date||ymd(new Date()),...(extra||{})}; }
 function fillFromReading(r,how){ if(!r){ $("readNote").hidden=false; $("readNote").textContent=how==="scan"?"Couldn't find a total on that receipt. Enter it below.":"Couldn't find an amount in that message. Enter it below."; return; }
   const p=readingToPre(r); ctx={kind:"read"};
@@ -1208,7 +1222,9 @@ $("pasteYes").onclick=()=>{ const t=$("pasteText").value; closePaste(); fillFrom
 /* ---------- To review inbox ---------- */
 const INBOX=()=>(store&&store.inbox)||[];
 async function addToInbox(items){ if(!store||!store.config||!items.length) return 0; const cur=INBOX();
-  const fresh=items.filter(it=>!cur.some(c=>(it.ref&&c.ref===it.ref)||(c.amount===it.amount&&c.date===it.date&&c.text===it.text))
+  const same=(a,b)=>(a.ref&&b.ref&&a.ref===b.ref)||(a.amount===b.amount&&a.date===b.date&&a.type===b.type&&tok(a.who).join(" ")===tok(b.who).join(" "));
+  const uniq=[]; items.forEach(it=>{ const u=uniq.find(u=>same(u,it)); if(!u){uniq.push({...it});return} ["source","who","date","ref"].forEach(k=>{if(!u[k]&&it[k])u[k]=it[k]}); });
+  const fresh=uniq.filter(it=>!cur.some(c=>same(c,it))
     &&!(it.ref&&expenses.some(e=>e.srcRef===it.ref)));
   if(!fresh.length) return 0; await call("setInbox",{inbox:[...cur,...fresh.map(it=>({id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...it,at:new Date().toISOString()}))]}); return fresh.length; }
 async function dropInbox(id){ await call("setInbox",{inbox:INBOX().filter(x=>x.id!==id)}); }
