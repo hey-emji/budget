@@ -1738,6 +1738,34 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 $("syncPill").onclick=()=>{if(syncMeta())syncNow({user:true})};
 setTimeout(()=>{if(syncMeta()&&store&&store.config)syncNow({})},1500);
 setTimeout(()=>{processShared().catch(()=>{})},900);
+/* ---------- back button / swipe back: close what's open first, warn before leaving ---------- */
+(function(){
+  const vis=id=>{const e=$(id);return e&&!e.hidden};
+  let exitArmed=false, rearmT=0;
+  const guard=()=>{ try{ history.pushState({bujjet:1},""); }catch(e){} };
+  function handleBack(){
+    if(vis("pasteDlg")){ closePaste(); return true; }
+    if(vis("dlg")){ if($("dlgBack").onclick) $("dlgNo").click(); return true; }
+    if(vis("pwDlg")){ $("pwNo").click(); return true; }
+    if(vis("ed")){ $("edNo").click(); return true; }
+    if(vis("mgDlg")){ closeManage(); return true; }
+    if(vis("upDlg")){ closeUpcoming(); return true; }
+    if(vis("insSheet")){ closeIns(); return true; }
+    if(vis("addForm")){ const typed=($("amt").value||"").trim()&&!(ctx&&ctx.kind==="edit");
+      if(typed){ confirmBox("Discard this entry?","You haven't saved it yet.",{yes:"Discard",no:"Keep editing"}).then(ok=>{ if(ok) closeSheet(); }); return true; }
+      closeSheet(); return true; }
+    if(vis("onb")){ if(onb&&onb.i>0){ $("onbBack").click(); return true; } return false; }
+    if(curView==="prefs"){ closePrefs(); return true; }
+    if(curView!=="today"){ const t=document.querySelector('nav .tab[data-v="today"]'); if(t) t.click(); return true; }
+    return false; }
+  history.replaceState({bujjet:0},""); guard();
+  window.addEventListener("popstate",()=>{
+    if(handleBack()){ exitArmed=false; guard(); return; }
+    if(exitArmed) return;            // second back: let it leave
+    exitArmed=true; toast(NATIVE?"Swipe back again to close bujjet":"Go back again to leave bujjet");
+    clearTimeout(rearmT); rearmT=setTimeout(()=>{ exitArmed=false; guard(); },2000);
+  });
+})();
 if("serviceWorker" in navigator&&!NATIVE){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 
 /* ---------- touch, sound and save feedback ---------- */
