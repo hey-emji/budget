@@ -1719,6 +1719,12 @@ async function doExport(mode){
   try{const payload={app:"bujjet",format:1,exportedAt:new Date().toISOString(),state:store};
     const out=pw?await encryptJSON(payload,pw):payload;
     const name=`bujjet-${ymd(new Date())}.bujjet`;
+    if(NR&&NR.saveFile){ // Android app: browsers' download/share don't work inside the app
+      if(mode==="share") await NR.shareFile({name,data:JSON.stringify(out)});
+      else await NR.saveFile({name,data:JSON.stringify(out)});
+      await call("setConfig",{patch:{lastExport:new Date().toISOString()}});
+      if(mode!=="share") await confirmBox("Backup saved","It's in your phone's Files app → Downloads → bujjet, named "+name+".",{ok:true,yes:"Got it"});
+      return; }
     if(mode==="share"){
       const file=new File([JSON.stringify(out)],name,{type:"application/octet-stream"});
       if(!(navigator.canShare&&navigator.canShare({files:[file]}))){toast("Sharing isn't supported here. Use Save backup file.");return}

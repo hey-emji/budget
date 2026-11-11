@@ -71,6 +71,22 @@ jobs:
           npx --yes @capacitor/assets generate --android --iconBackgroundColor '#0e0e0e' --iconBackgroundColorDark '#0e0e0e'
       - name: Sync
         run: npx cap sync android
+      - name: Sign test builds with one fixed key (so new builds install over old ones)
+        run: |
+          cat >> android/app/build.gradle <<'GR'
+
+          android {
+              signingConfigs {
+                  testKey {
+                      storeFile rootProject.file("../native/signing/test.jks")
+                      storePassword "bujjet-test"
+                      keyAlias "bujjettest"
+                      keyPassword "bujjet-test"
+                  }
+              }
+              buildTypes { debug { signingConfig signingConfigs.testKey } }
+          }
+          GR
       - name: Build APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
       - name: Publish test APK
