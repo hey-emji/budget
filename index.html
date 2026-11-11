@@ -1159,7 +1159,7 @@ function apply(j){
 async function persist(){store.savedAt=new Date().toISOString(); await idbSet("state",store); if(typeof queueSync==="function") queueSync();}
 
 /* ---------- Google account + Drive sync (optional) ---------- */
-const GOOGLE_CLIENT_ID=""; // OAuth Web client ID from Google Cloud (origin https://bujjet.com)
+const GOOGLE_CLIENT_ID="74104418090-c4aun8sh4o0jf2uo7gllc9ic8nj63pl3.apps.googleusercontent.com"; // OAuth Web client ID from Google Cloud (origin https://bujjet.com)
 const G_SCOPE="https://www.googleapis.com/auth/drive.appdata openid email profile", SYNC_FILE="bujjet-sync.json";
 let gTok=null, syncing=false, syncT=0;
 try{const t=JSON.parse(localStorage.getItem("bujjet.gtok")||"null"); if(t&&t.exp>Date.now()) gTok=t;}catch(e){}
