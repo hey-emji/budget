@@ -1,6 +1,7 @@
 {
   "name": "bujjet",
   "short_name": "bujjet",
+  "description": "Know what's left until payday.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
