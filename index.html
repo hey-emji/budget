@@ -112,6 +112,11 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
+.hdrright{display:flex;align-items:center;gap:8px;flex:none}
+.gear{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
+.gear svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.prefhead{align-items:center}.preftitle{font-size:22px}
+.backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
 #upDlg{z-index:29}#upBack{z-index:28}
 .upmonth{padding:10px 0 2px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
@@ -219,7 +224,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 <main>
   <header class="row">
     <div><h1 id="brand" role="button" tabindex="0" aria-live="polite"><span id="brandText">bujjet</span></h1><div class="muted small" id="today"></div></div>
-    <span class="pill info" id="syncPill">Loading…</span>
+    <div class="hdrright"><span class="pill info" id="syncPill">Loading…</span><button class="gear" type="button" id="gearBtn" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
   </header>
   <div id="notice" class="notice" hidden></div>
 
@@ -305,12 +310,20 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <div id="setFields" style="display:grid;gap:10px"></div>
       <button class="primary" type="submit">Save changes</button>
       <div class="small muted">When a paycheck is short, categories are trimmed from the bottom of the list up. Cards and bills are always covered first.</div>
-    <label class="fxrow small"><span>Sounds and vibration on taps and saves</span><input type="checkbox" id="fxToggle"></label>
       </form>
-    <div class="card" id="manageCard">
-      <h2>Manage</h2>
-      <div class="list" id="manageList"></div>
-    </div>
+    <button class="secondary" type="button" id="toPrefs">Settings: accounts, cards, bills & backup ›</button>
+  </section>
+
+  <!-- PREFERENCES / SETTINGS PAGE -->
+  <section class="view" id="v-prefs" hidden>
+    <div style="display:grid;gap:14px">
+      <div class="row prefhead"><button class="backbtn" type="button" id="prefsBack" aria-label="Back">‹</button><h2 class="preftitle">Settings</h2><span></span></div>
+      <div class="card"><h2>You</h2><div class="list" id="mg-you"></div></div>
+      <div class="card"><h2>Money</h2><div class="list" id="mg-money"></div></div>
+      <div class="card"><h2>Budget setup</h2><div class="list" id="mg-budget"></div></div>
+      <div class="card"><h2>Preferences</h2>
+        <label class="fxrow small"><span>Sounds and vibration on taps and saves</span><input type="checkbox" id="fxToggle"></label>
+      </div>
     <div class="card" id="dataCard">
       <div class="row"><h2>Backup & data</h2><span class="pill good" id="localPill">On this phone</span></div>
       <div class="small muted" id="backupInfo"></div>
@@ -318,7 +331,11 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <button class="secondary" type="button" id="importBtn">Import backup</button>
       <input type="file" id="importFile" accept=".bujjet,.json,application/json" hidden>
       <button class="ghost" type="button" id="eraseBtn" style="justify-self:start;color:var(--bad)">Erase all data on this phone</button>
-      <div class="small muted">bujjet doesn't give financial advice. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></div>
+    </div>
+      <div class="card"><h2>About</h2>
+        <div class="small muted">bujjet keeps your data on this phone only. It doesn't give financial advice.</div>
+        <div class="small"><a href="privacy.html">Privacy notice</a> · <a href="terms.html">Terms of use</a></div>
+      </div>
     </div>
   </section>
 </main>
@@ -912,10 +929,13 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   btn.disabled=false;
 };
 
-const ORDER=["today","paydays","debts","settings"]; let curView="today";
+const ORDER=["today","paydays","debts","settings"]; let curView="today", prevView="today";
+function showView(to,dir){document.querySelectorAll(".view").forEach(v=>{const on=v.id==="v-"+to; v.hidden=!on; v.classList.remove("in-right","in-left"); if(on){void v.offsetWidth; v.classList.add("in-"+dir)}}); window.scrollTo(0,0); if(typeof compactHero==="function") compactHero(false);}
+function openPrefs(){ if(curView==="prefs") return; prevView=curView; curView="prefs"; document.querySelectorAll("nav .tab").forEach(x=>x.removeAttribute("aria-current")); showView("prefs","right"); }
+function closePrefs(){ const to=prevView||"today"; curView=to; document.querySelectorAll("nav .tab").forEach(x=>{if(x.dataset.v===to)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")}); showView(to,"left"); }
 document.querySelectorAll("nav .tab").forEach(b=>b.onclick=()=>{
   const to=b.dataset.v; if(to===curView){window.scrollTo({top:0,behavior:"smooth"});return}
-  const dir=ORDER.indexOf(to)>ORDER.indexOf(curView)?"right":"left"; curView=to;
+  const dir=curView==="prefs"?"left":ORDER.indexOf(to)>ORDER.indexOf(curView)?"right":"left"; curView=to;
   document.querySelectorAll("nav .tab").forEach(x=>x.toggleAttribute("aria-current",x===b)); b.setAttribute("aria-current","page");
   document.querySelectorAll(".view").forEach(v=>{const on=v.id==="v-"+to; v.hidden=!on; v.classList.remove("in-right","in-left"); if(on){void v.offsetWidth; v.classList.add("in-"+dir)}});
   window.scrollTo(0,0); compactHero(false);
@@ -944,6 +964,7 @@ function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(n
 function closeUpcoming(){$("upDlg").hidden=true;$("upBack").hidden=true}
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
+$("gearBtn").onclick=openPrefs; $("prefsBack").onclick=closePrefs; $("toPrefs").onclick=openPrefs;
 $("upClose").onclick=closeUpcoming; $("upBack").onclick=closeUpcoming;
 $("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")}; $("mXfer").onclick=()=>{if(!ctx)setMode("xfer")};
 $("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
@@ -1173,7 +1194,7 @@ function closeManage(){$("mgDlg").hidden=true;$("mgBack").hidden=true;mgSave=nul
 $("mgClose").onclick=closeManage; $("mgBack").onclick=closeManage;
 $("mgSave").onclick=async()=>{if(!mgSave)return;try{await mgSave();closeManage();toast("Saved")}catch(e){toast(e&&e.message&&e.message.length<80?e.message:"Couldn't save. Try again.")}};
 function renderManage(){
-  const L=$("manageList"); if(!L||!config) return; L.textContent="";
+  if(!config||!$("mg-you")) return; ["mg-you","mg-money","mg-budget"].forEach(id=>$(id).textContent="");
   const B=balances();
   const rows=[
     ["You & pay",`${config.name||"No name"} · ${peso(config.incomePerPayday)} per payday`,()=>openManage("You & pay","",b=>{b.innerHTML=`<div class="onbform"><label><span class="small muted">Your name</span><input id="mName"></label><label><span class="small muted">Take-home pay per payday (₱)</span><input id="mInc" inputmode="decimal"></label></div>`;$("mName").value=config.name||"";$("mInc").value=config.incomePerPayday},
@@ -1200,7 +1221,8 @@ function renderManage(){
     ["Subscriptions",config.subs.map(x=>x.name).join(", ")||"None",()=>{const d=config.subs.map(x=>({...x}));
       openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>({name:x.name.trim(),amount:n2(x.amount)}))}})})}],
   ];
-  rows.forEach(([t,sub,fn])=>{const r=document.createElement("button");r.type="button";r.className="item mgrow";r.innerHTML='<span class="t"><strong></strong><span class="small muted"></span></span><span></span><span class="chev">›</span>';
+  const grp={"You & pay":"mg-you","Accounts & wallets":"mg-money","Credit cards":"mg-money","Installments & loans":"mg-money","Spending categories":"mg-budget","Bills":"mg-budget","Subscriptions":"mg-budget"};
+  rows.forEach(([t,sub,fn])=>{const L=$(grp[t]||"mg-budget");const r=document.createElement("button");r.type="button";r.className="item mgrow";r.innerHTML='<span class="t"><strong></strong><span class="small muted"></span></span><span></span><span class="chev">›</span>';
     r.querySelector("strong").textContent=t;r.querySelector(".t .small").textContent=sub;r.onclick=fn;L.appendChild(r)});
 }
 
