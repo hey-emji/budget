@@ -142,6 +142,15 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .benefits strong{color:var(--ink)}
 .gpitch{display:grid;gap:10px}.onbnote{text-align:center}
 #syncPill{cursor:pointer}
+.tools{display:flex;gap:8px;flex-wrap:wrap}
+.tool{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 13px var(--body);cursor:pointer}
+.tool svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#readNote{padding:8px 10px;border-radius:12px;background:var(--accent-soft)}
+#pasteText{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:14px;padding:10px 12px;font:15px var(--body);background:var(--bg);color:var(--ink);resize:vertical}
+#pasteDlg{z-index:46}#pasteBack{z-index:45}
+.ibx{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:10px 0;border-top:1px solid var(--line)}
+.ibx:first-child{border-top:none}.ibx .amt{font-weight:700;text-align:right}.ibx .acts{grid-column:1/-1;display:flex;gap:8px}
+.ibx .acts button{padding:7px 12px;font-size:13px}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -269,6 +278,11 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
         <div class="row"><span class="eyebrow muted" id="heroLabel">Left until payday</span><span class="pill info" id="heroPayday"></span></div>
         <div class="big" id="heroLeft">—</div>
         <div class="muted small" id="heroSub"></div>
+      </div>
+      <div class="card" id="inboxCard" hidden>
+        <div class="row"><h2>To review</h2><span class="pill warn" id="inboxCount"></span></div>
+        <div class="small muted">Found in what you shared. Check each one, then save it, or dismiss it.</div>
+        <div class="list" id="inboxList"></div>
       </div>
 
 
@@ -401,6 +415,9 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   <div class="grab"></div>
   <div class="row sheethead"><h2 id="sheetTitle">Log spending</h2><button class="ghost" type="button" id="closeSheet">Cancel</button></div>
   <div class="seg seg3" role="group" aria-label="Entry type"><button type="button" id="mExp" aria-pressed="true">Expense</button><button type="button" id="mInc" aria-pressed="false">Income</button><button type="button" id="mXfer" aria-pressed="false">Transfer</button></div>
+  <div class="tools" id="sheetTools"><button type="button" class="tool" id="scanBtn"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>Scan receipt</button><button type="button" class="tool" id="pasteBtn"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg>Paste bank message</button></div>
+  <input type="file" id="scanFile" accept="image/*" hidden>
+  <div class="small muted" id="readNote" hidden></div>
   <div class="quickrow" id="quick" aria-label="Quick add"></div>
   <label class="amount" for="amt"><span>₱</span><input id="amt" inputmode="decimal" placeholder="0" required></label>
   <div class="small muted" id="catLabel">Category</div>
@@ -415,6 +432,13 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   </div>
   <button class="primary" type="submit" id="addBtn">Save</button>
 </form>
+<div class="backdrop" id="pasteBack" hidden></div>
+<div class="dialog" id="pasteDlg" role="dialog" aria-modal="true" aria-labelledby="pasteTitle" hidden>
+  <h2 id="pasteTitle">Paste a bank message</h2>
+  <p class="small muted">Copy the SMS or app notification from your bank or e-wallet, then paste it here. bujjet reads it on this phone.</p>
+  <textarea id="pasteText" rows="5" placeholder="You have sent PHP 250.00 of GCash to…"></textarea>
+  <div class="inline"><button class="secondary" type="button" id="pasteNo">Cancel</button><button class="primary" type="button" id="pasteYes">Read it</button></div>
+</div>
 <div class="backdrop" id="dlgBack" hidden></div>
 <div class="dialog" id="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" hidden>
   <h2 id="dlgTitle"></h2>
@@ -978,12 +1002,14 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
     btn.disabled=false; return;
   }
   const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...vals,ts:new Date().toISOString()};
+  const fromBox=c&&c.kind==="inbox"?INBOX().find(x=>x.id===c.inboxId):null; if(fromBox&&fromBox.ref) exp.srcRef=fromBox.ref;
   expenses=[...expenses,exp]; render(); closeSheet(); $("amt").value="";$("note").value="";
   try{await call("add",{expense:exp});
     if(c&&c.kind==="bill"){const bills=config.bills.map((x,i)=>i===c.bill?{...x,paidMonth:c.month}:x);await call("setConfig",{patch:{bills}});}
     if(vals.cat==="credit"&&LCARDS()[vals.ref]&&!(c&&c.kind==="carry")){await call("setConfig",{patch:applyInstallmentPayment(LCARDS()[vals.ref],vals.amount,exp.id)});}
     if(c&&c.kind==="stmt"){const cards=config.cards.map(x=>x.id===c.card?{...x,paidStmt:x.statementDue}:x);await call("setConfig",{patch:{cards}});}
     if(c&&c.kind==="carry"){await call("setConfig",{patch:{card:{...config.card,paidOff:Math.round(((config.card.paidOff||0)+vals.amount)*100)/100}}});}
+    if(fromBox) await dropInbox(fromBox.id);
     toast("Logged "+peso2(v));}
   catch(e){expenses=expenses.filter(x=>x.id!==exp.id);render();toast("Couldn't save. Check your connection.")}
   btn.disabled=false;
@@ -1017,7 +1043,7 @@ function buildQuick(){const q=$("quick");q.textContent="";
 function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(new Date());
   $("sheetTitle").textContent=pre&&pre.kind==="edit"?(String(pre.cat).startsWith("inc-")?"Edit income":pre.cat==="transfer"||pre.ref?"Edit transfer":"Edit expense"):pre&&pre.kind==="carry"?"Log carryover payment":"Log spending";
   $("addBtn").textContent=pre&&pre.kind==="edit"?"Save changes":"Save";
-  $("quick").hidden=!!pre; if(!pre) buildQuick();
+  $("quick").hidden=!!pre; if(!pre) buildQuick(); $("readNote").hidden=true; $("sheetTools").hidden=!!pre&&pre.kind==="edit";
   const pm=pre&&pre.mode?pre.mode:pre&&pre.cat&&String(pre.cat).startsWith("inc-")?"inc":pre&&(pre.cat==="transfer"||(pre.cat==="credit"&&pre.ref))?"xfer":"exp";
   setMode(pm,pm==="xfer"?(pre.ref?"to-"+pre.ref:pre.to):pre&&pre.cat,pre&&pre.acct);
   if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
@@ -1083,6 +1109,129 @@ function renderIns(){
       (c.plan>0?`<div class="ibar"><span style="width:${(c.plan/mx*100).toFixed(1)}%;background:var(--line)"></span></div>`:"")+
       `<div class="ibar" style="background:transparent"><span style="width:${(sp/mx*100).toFixed(1)}%;background:${over?"var(--bad)":c.color}"></span></div></div>`}).join("");
 }
+/*PARSER-START*/
+/* ---------- message + receipt reading (all on this phone) ---------- */
+const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank/i],["SeaBank",/sea ?bank/i],
+  ["GoTyme",/go ?tyme/i],["Security Bank",/security ?bank/i],["RCBC",/\brcbc\b|diskartech/i],["Landbank",/land ?bank/i],["PNB",/\bpnb\b/i],["Chinabank",/china ?bank/i],["EastWest",/east ?west/i],
+  ["ShopeePay",/shopee ?pay|spaylater/i],["GrabPay",/grab ?pay/i],["Tonik",/\btonik\b/i],["CIMB",/\bcimb\b/i],["Coins.ph",/coins\.ph/i],["AUB",/\baub\b/i],["PSBank",/psbank/i],["Citi",/\bciti(bank)?\b/i]];
+const NUM="(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)";
+const AMT_RE=new RegExp("(?:PHP|Php|php|₱|\\bP)\\s?"+NUM+"(?![\\d,])","g");
+const toNum=s=>Number(String(s).replace(/,/g,""));
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function findDate(t,today){today=today||new Date();
+  const pad=n=>String(n).padStart(2,"0"), mk=(y,m,d)=>{if(y<100)y+=2000; if(m<1||m>12||d<1||d>31) return null; const dt=new Date(y,m-1,d); if(dt>new Date(today.getTime()+864e5)||dt<new Date(today.getTime()-400*864e5)) return null; return `${y}-${pad(m)}-${pad(d)}`};
+  let m=t.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/); if(m){const r=mk(+m[1],+m[2],+m[3]); if(r) return r;}
+  m=t.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/); if(m){const r=mk(+m[3],+m[1],+m[2])||mk(+m[3],+m[2],+m[1]); if(r) return r;}
+  m=t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/i); if(m){const r=mk(m[3]?+m[3]:today.getFullYear(),MONTHS[m[1].slice(0,3).toLowerCase()],+m[2]); if(r) return r;}
+  m=t.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s*(\d{4})?/i); if(m){const r=mk(m[3]?+m[3]:today.getFullYear(),MONTHS[m[2].slice(0,3).toLowerCase()],+m[1]); if(r) return r;}
+  return null;}
+const CAT_HINTS=[
+  ["food",/puregold|super ?market|hypermarket|savemore|save more|easymart|alfamart|7[- ]?eleven|ministop|lawson|family ?mart|waltermart|s ?& ?r\b|landers|grocer|palengke|dali\b|merkado|metro (super|mart)|shopwise|rustan'?s|market|grabmart|pandamart/i],
+  ["dining",/jollibee|mcdo|mcdonald|kfc|chowking|greenwich|mang inasal|starbucks|coffee|caf[eé]|restaurant|resto|grab ?food|foodpanda|shakey|pizza|burger|milk ?tea|bakery|bakeshop|red ribbon|goldilocks|max'?s|army navy|potato corner|dunkin|krispy|tim hortons|bo'?s|cbtl|samgyup|ramen|food ?court/i],
+  ["transport",/\bgrab\b(?!\s*(food|mart|pay))|grab ?car|angkas|joyride|move ?it|\blrt\b|\bmrt\b|beep|petron|\bshell\b|caltex|seaoil|cleanfuel|phoenix|parking|toll|easytrip|autosweep|taxi|bus\b|p2p/i],
+  ["household",/hardware|wilcon|handyman|ace home|true ?value|ikea|our home|mr\.? ?diy|daiso|japan home|home ?depot|landmark|sm home|cleaning|laundry/i],
+  ["personal",/watsons|mercury ?drug|southstar|rose ?pharmacy|generika|the generics|pharmacy|salon|barber|uniqlo|h&m|penshoppe|bench|cigar|marlboro|vape|clinic|dental|optical/i],
+  ["bills",/meralco|maynilad|manila ?water|pldt|converge|globe ?(at ?home|postpaid)?|smart ?(postpaid|bro)?|\bdito\b|sky ?(cable|fiber)|cignal|bayad|electric|water district|association dues|hoa|insurance|philhealth|sss|pag-?ibig/i],
+  ["subs",/netflix|spotify|youtube|apple\.com|icloud|google ?(one|play)|hbo|disney|viu|prime video|claude|openai|chatgpt|canva/i]];
+const CAT_NAME_RE={food:/food|grocer/i,dining:/dining|eat|resto/i,transport:/transpo/i,household:/house|home/i,personal:/personal/i};
+function guessCat(t,cats){ for(const [k,re] of CAT_HINTS){ if(!re.test(t)) continue;
+    if(k==="bills"||k==="subs"){ const u=cats.find(c=>c.id==="utilities"); if(u) return u.id; continue; }
+    const c=cats.find(c=>CAT_NAME_RE[k]&&CAT_NAME_RE[k].test(c.name)); if(c) return c.id; }
+  return "other"; }
+function guessAcct(t,accts){ const src=PH_SOURCES.find(([,re])=>re.test(t)); if(!src) return null;
+  const re=src[1]; const hit=accts.find(a=>re.test(a.name)); return hit?hit.id:null; }
+function cleanName(s){return String(s||"").replace(/\s+/g," ").replace(/^[\s:,-]+|[\s.,:;-]+$/g,"").slice(0,40)}
+// Read a bank / e-wallet message. Returns null if no amount found.
+function parseMessage(raw,opts){opts=opts||{}; const text=String(raw||"").replace(/ /g," ").trim(); if(!text) return null;
+  // drop balance / limit figures so they aren't mistaken for the amount
+  const t=text.replace(/(?:avail(?:able)?\.?|remaining|new|current|running|outstanding|ending|wallet)?\s*(?:bal(?:ance)?\.?|credit limit|limit)\s*(?:is|of|:)?\s*(?:PHP|Php|₱|P)\s?[\d,]+(?:\.\d{1,2})?/gi," ");
+  const amts=[...t.matchAll(AMT_RE)].map(m=>({v:toNum(m[1]),i:m.index})).filter(a=>a.v>0&&a.v<10000000);
+  if(!amts.length) return null;
+  const low=t.toLowerCase();
+  const inc=/\b(received|you('ve| have)? got|credited|cash[- ]?in|deposit(ed)?|incoming|refund(ed)?|reversal|salary|payroll|sent you)\b/.test(low);
+  const out=/\b(you('ve| have)? (sent|paid|transferred)|paid|purchase[ds]?|debited|spent|charged|payment (to|for|of)|withdraw(n|al)?|cash[- ]?out|bought|bills? payment|sent)\b/.test(low);
+  const type=inc&&!/\b(you('ve| have)? (sent|paid)|purchase|debited|spent|charged)\b/.test(low)?"income":"expense";
+  const amount=amts[0].v;
+  let who=null, m=t.match(/\b(?:at|to|from|for|merchant:?|paid to|sent to|received from)\s+([A-Z0-9][A-Za-z0-9&'.\-* ]{1,40}?)(?=\s+(?:on|for|with|using|via|thru|through|ref|amount|worth|has|was|is|at|from)\b|\s*[.,;:(]|\s*$)/);
+  if(m&&!/^(PHP|Php|P|₱|your|you|the|a|an|account|acct|card|ending)$/i.test(m[1].trim())) who=cleanName(m[1]);
+  const ref=(t.match(/\bref(?:erence)?\.?\s*(?:no\.?|number|#)?\s*:?\s*([A-Z0-9]{6,})/i)||[])[1]||"";
+  const src=PH_SOURCES.find(([,re])=>re.test(text));
+  return {type,amount,who,source:src?src[0]:"",ref,date:findDate(text)||null,text:text.slice(0,400),sure:out||inc};
+}
+// Read a receipt's text (from the camera). Finds the total, the store and the date.
+function parseReceipt(raw){const lines=String(raw||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean); if(!lines.length) return null;
+  const num=l=>{const ms=[...l.replace(/[Oo](?=\d)|(?<=\d)[Oo]/g,"0").matchAll(/(\d{1,3}(?:[,\s]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})(?!\d)/g)].map(m=>toNum(m[1].replace(/\s/g,"").replace(/,(\d{2})$/,".$1")));return ms.length?ms[ms.length-1]:null};
+  let total=null;
+  const bad=/sub ?total|vat(able)?|vat-?ex|zero|exempt|disc|items?|qty|change|cash\b|tender|card|gcash|maya|service ?charge|tip|points|savings|less/i;
+  for(let i=0;i<lines.length&&total==null;i++){ const l=lines[i];
+    if(/(grand\s*total|total\s*(amount\s*)?due|amount\s*due|total\s*amount|total\s*sales|net\s*total|^\s*total\b)/i.test(l)&&!/sub ?total/i.test(l)){
+      total=num(l); if(total==null&&lines[i+1]) total=num(lines[i+1]); } }
+  if(total==null){ const vals=lines.filter(l=>!bad.test(l)).map(num).filter(v=>v!=null&&v<500000); if(vals.length) total=Math.max(...vals); }
+  if(!(total>0)) return null;
+  const skip=/receipt|invoice|official|vat reg|tin\b|min\b|s\/n|pos\b|tel|address|^\W*$|\d{3}-\d{3}/i;
+  const store=cleanName((lines.find(l=>/[A-Za-z]{3}/.test(l)&&!skip.test(l))||"").replace(/[^A-Za-z0-9&'. -]/g," "));
+  return {type:"expense",amount:Math.round(total*100)/100,who:store||null,source:"",ref:"",date:findDate(lines.join(" "))||null,text:lines.slice(0,12).join("\n").slice(0,400),sure:true,receipt:true};
+}
+/*PARSER-END*/
+function cleanWho(r){return r.who&&!/\*{2,}/.test(r.who)?r.who:(r.who||"")}
+// Turn a reading into what the log sheet needs
+function readingToPre(r,extra){ const cats=CATS().filter(c=>c.id!=="credit"), blob=[r.who,r.text].filter(Boolean).join(" ");
+  const acct=guessAcct(r.source+" "+blob,PAYW())||undefined;
+  let mode=r.type==="income"?"inc":"exp", cat=mode==="inc"?(/refund|reversal/i.test(blob)?"inc-refund":/salary|payroll|bonus|13th/i.test(blob)?"inc-bonus":"inc-other"):guessCat(blob,cats), to;
+  if(mode==="exp"&&/\b(transferr?ed|transfer|instapay|pesonet|fund transfer|cash ?in)\b/i.test(r.text)){ const own=XTO().find(a=>a.id.slice(3)!==acct&&r.who&&new RegExp(String(a.name).split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i").test(r.who)); if(own){mode="xfer";to=own.id;} }
+  if(mode==="inc"&&!INC.some(c=>c.id===cat)) cat=INC[0].id;
+  const who=cleanWho(r); const note=(r.receipt?who:(who?(mode==="inc"?"From ":"")+who:r.source)).slice(0,80);
+  return {kind:"read",mode,cat,to,acct,amount:r.amount,note,date:r.date||ymd(new Date()),...(extra||{})}; }
+function fillFromReading(r,how){ if(!r){ $("readNote").hidden=false; $("readNote").textContent=how==="scan"?"Couldn't find a total on that receipt. Enter it below.":"Couldn't find an amount in that message. Enter it below."; return; }
+  const p=readingToPre(r); ctx={kind:"read"};
+  setMode(p.mode,p.mode==="xfer"?p.to:p.cat,p.acct); $("amt").value=p.amount; $("note").value=p.note; $("dt").value=p.date; $("quick").hidden=true;
+  $("readNote").hidden=false; $("readNote").textContent=(how==="scan"?"Read from your receipt":"Read from your message")+(r.source?" ("+r.source+")":"")+". Check the amount, category and account, then save."; }
+let tessP=null;
+function loadTess(){ if(window.Tesseract) return Promise.resolve(); if(tessP) return tessP;
+  tessP=new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";s.onload=()=>res();s.onerror=()=>{tessP=null;rej(new Error("Couldn't load the receipt reader. Check your connection."))};document.head.appendChild(s)}); return tessP; }
+async function ocrImage(file,onP){ await loadTess(); const r=await Tesseract.recognize(file,"eng",{logger:m=>{if(onP&&m.status==="recognizing text") onP(m.progress)}}); return (r&&r.data&&r.data.text)||""; }
+async function readImage(file,kind){ const note=$("readNote"); if(note){note.hidden=false; note.textContent="Reading… the first time can take a little longer.";}
+  const text=await ocrImage(file,p=>{if(note) note.textContent="Reading… "+Math.round(p*100)+"%"});
+  // a screenshot of a bank notification reads better as a message; a photo of a receipt as a receipt
+  const asMsg=parseMessage(text); const asRc=parseReceipt(text);
+  if(kind==="share") return (asMsg&&asMsg.sure&&PH_SOURCES.some(([,re])=>re.test(text)))?asMsg:(asRc||asMsg);
+  return asRc||asMsg; }
+$("scanBtn").onclick=()=>$("scanFile").click();
+$("scanFile").onchange=async e=>{const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
+  try{ fillFromReading(await readImage(f,"scan"),"scan"); }catch(x){ $("readNote").hidden=false; $("readNote").textContent=x&&x.message?x.message:"Couldn't read that photo."; } };
+function openPaste(){ $("pasteText").value=""; $("pasteBack").hidden=false; $("pasteDlg").hidden=false;
+  if(navigator.clipboard&&navigator.clipboard.readText) navigator.clipboard.readText().then(t=>{if(t&&!$("pasteText").value&&/\d/.test(t)) $("pasteText").value=t.slice(0,1000)}).catch(()=>{});
+  setTimeout(()=>$("pasteText").focus(),50); }
+function closePaste(){ $("pasteBack").hidden=true; $("pasteDlg").hidden=true; }
+$("pasteBtn").onclick=openPaste; $("pasteNo").onclick=closePaste; $("pasteBack").onclick=closePaste;
+$("pasteYes").onclick=()=>{ const t=$("pasteText").value; closePaste(); fillFromReading(parseMessage(t),"paste"); };
+/* ---------- To review inbox ---------- */
+const INBOX=()=>(store&&store.inbox)||[];
+async function addToInbox(items){ if(!store||!store.config||!items.length) return 0; const cur=INBOX();
+  const fresh=items.filter(it=>!cur.some(c=>(it.ref&&c.ref===it.ref)||(c.amount===it.amount&&c.date===it.date&&c.text===it.text))
+    &&!(it.ref&&expenses.some(e=>e.srcRef===it.ref)));
+  if(!fresh.length) return 0; await call("setInbox",{inbox:[...cur,...fresh.map(it=>({id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...it,at:new Date().toISOString()}))]}); return fresh.length; }
+async function dropInbox(id){ await call("setInbox",{inbox:INBOX().filter(x=>x.id!==id)}); }
+function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INBOX(); card.hidden=!L.length; $("inboxCount").textContent=L.length; const host=$("inboxList"); host.textContent="";
+  L.forEach(it=>{ const d=document.createElement("div"); d.className="ibx";
+    d.innerHTML=`<div><strong></strong><div class="small muted"></div></div><div class="amt"></div><div class="acts"><button class="primary" type="button">Review and save</button><button class="ghost" type="button">Dismiss</button></div>`;
+    d.querySelector("strong").textContent=(it.type==="income"?"Money in":"Spent")+(cleanWho(it)?" · "+cleanWho(it):"");
+    d.querySelector(".small").textContent=[it.source||(it.receipt?"Receipt":"Shared"),it.date?dName(new Date(it.date+"T00:00")):"date not found"].join(" · ");
+    d.querySelector(".amt").textContent=(it.type==="income"?"+":"")+peso2(it.amount);
+    const [ok,no]=d.querySelectorAll(".acts button");
+    ok.onclick=()=>{ const p=readingToPre(it,{kind:"inbox",inboxId:it.id}); openSheet(p); $("quick").hidden=true; $("readNote").hidden=false; $("readNote").textContent="From what you shared"+(it.source?" ("+it.source+")":"")+". Check it, then save."; };
+    no.onclick=async()=>{ await dropInbox(it.id); toast("Dismissed"); };
+    host.appendChild(d); }); }
+/* ---------- things shared to bujjet from other apps ---------- */
+async function processShared(){ if(!/[?&]shared=1/.test(location.search)) return; history.replaceState(null,"",location.pathname);
+  if(!("caches" in window)) return; const c=await caches.open("bujjet-share"); const keys=await c.keys(); if(!keys.length) return;
+  if(!store||!store.config){ toast("Finish setting up bujjet first, then share again."); for(const k of keys) await c.delete(k); return; }
+  toast("Reading what you shared…"); const found=[];
+  for(const k of keys){ try{ const r=await c.match(k); if(/\/text-/.test(k.url)){ const t=await r.text(); const m=parseMessage(t); if(m) found.push(m); }
+      else { const b=await r.blob(); const m=await readImage(b,"share"); if(m) found.push(m); } }catch(e){} await c.delete(k); }
+  const $n=$("readNote"); if($n) $n.hidden=true;
+  if(!found.length){ toast("Couldn't find an amount in what you shared"); return; }
+  const n=await addToInbox(found); toast(n?`${n} item${n>1?"s":""} to review on Today`:"Already in your list"); }
 /* swipe down to close bottom sheets */
 function swipeClose(el,close,backId){let y0=null,dy=0,t0=0,drag=false;
   el.addEventListener("touchstart",e=>{ if(e.touches.length!==1) return; const inGrab=e.target.closest(".grab,.sheethead"); if(!inGrab&&el.scrollTop>0) return;
@@ -1166,7 +1315,7 @@ let store=null;
 function setNotice(t){const n=$("notice");n.hidden=!t;n.textContent=t||""}
 function apply(j){
   config=JSON.parse(JSON.stringify(j.config)); expenses=JSON.parse(JSON.stringify(j.expenses||[])); paydays=JSON.parse(JSON.stringify(j.paydays||{}));
-  $("syncPill").textContent="Saved"; render(); renderSettings(true); renderManage(); renderBackup();
+  $("syncPill").textContent="Saved"; render(); renderSettings(true); renderManage(); renderBackup(); if(typeof renderInbox==="function") renderInbox();
   if(!revealed){setTimeout(greet,700);revealed=true;$("skel").hidden=true;const t=$("todayContent");t.hidden=false;t.classList.add("reveal");}
 }
 async function persist(){store.savedAt=new Date().toISOString(); await idbSet("state",store); if(typeof queueSync==="function") queueSync();}
@@ -1202,7 +1351,7 @@ async function driveWrite(id,obj){const meta={name:SYNC_FILE,mimeType:"applicati
   return (await (await gfetch(url,{method:id?"PATCH":"POST",headers:{"Content-Type":"multipart/related; boundary="+b},body})).json()).id}
 async function gUser(){return (await gfetch("https://www.googleapis.com/oauth2/v3/userinfo")).json()}
 async function pullRemote(f){const j=await driveRead(f.id); const st=j.state||j; if(!st||!st.config) throw new Error("The Drive copy isn't a bujjet backup");
-  store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{},savedAt:st.savedAt||(f.appProperties||{}).savedAt||new Date().toISOString()};
+  store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{},inbox:st.inbox||[],savedAt:st.savedAt||(f.appProperties||{}).savedAt||new Date().toISOString()};
   ensureCash(store.config); await idbSet("state",store); return store.savedAt}
 async function pushLocal(f){const id=await driveWrite(f&&f.id,{app:"bujjet",format:1,exportedAt:new Date().toISOString(),state:store}); return id}
 function syncPillText(t,cls){const p=$("syncPill"); if(!p) return; p.className="pill "+(cls||"info"); p.textContent=t;}
@@ -1241,6 +1390,7 @@ async function call(action,data){
   else if(action==="delete") store.expenses=store.expenses.filter(e=>e.id!==data.id);
   else if(action==="setPay") store.paydays[data.date]={income:Number(data.income)||0,date:data.date};
   else if(action==="setConfig") Object.assign(store.config,JSON.parse(JSON.stringify(data.patch||{})));
+  else if(action==="setInbox") store.inbox=JSON.parse(JSON.stringify(data.inbox||[]));
   await persist(); apply(store);
 }
 async function load(){
@@ -1512,6 +1662,7 @@ $("eraseBtn").onclick=async()=>{if(!(await confirmBox("Erase everything?","This 
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&store&&store.config){now=new Date();render();if(syncMeta())syncNow({})}});
 $("syncPill").onclick=()=>{if(syncMeta())syncNow({user:true})};
 setTimeout(()=>{if(syncMeta()&&store&&store.config)syncNow({})},1500);
+setTimeout(()=>{processShared().catch(()=>{})},900);
 if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 
 /* ---------- touch, sound and save feedback ---------- */
