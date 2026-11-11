@@ -133,6 +133,15 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .gear{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
 .gear svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .prefhead{display:grid;grid-template-columns:40px 1fr 40px;align-items:center}.preftitle{font-size:22px;text-align:center;margin:0}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:13px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 16px var(--body);cursor:pointer}
+.gbtn svg{width:20px;height:20px}
+.benefits{list-style:none;padding:0;margin:4px 0 6px;display:grid;gap:9px}
+.benefits li{position:relative;padding-left:26px;line-height:1.4}
+.benefits li::before{content:"";position:absolute;left:0;top:2px;width:16px;height:16px;border-radius:50%;background:var(--accent-soft)}
+.benefits li::after{content:"";position:absolute;left:5px;top:6px;width:6px;height:3px;border-left:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(-45deg)}
+.benefits strong{color:var(--ink)}
+.gpitch{display:grid;gap:10px}.onbnote{text-align:center}
+#syncPill{cursor:pointer}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -1082,10 +1091,10 @@ $("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0)
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
 function confirmBox(title,text,opts){opts=opts||{};return new Promise(res=>{
-  $("dlgTitle").textContent=title;$("dlgText").textContent=text;$("dlgYes").textContent=opts.yes||"Delete";$("dlgYes").className=opts.ok?"primary":"danger";$("dlgNo").hidden=!!opts.ok;
+  $("dlgTitle").textContent=title;$("dlgText").textContent=text;$("dlgYes").textContent=opts.yes||"Delete";$("dlgYes").className=opts.ok||opts.primary?"primary":"danger";$("dlgNo").hidden=!!opts.ok;$("dlgNo").textContent=opts.no||"Cancel";
   $("dlg").hidden=false;$("dlgBack").hidden=false;(opts.ok?$("dlgYes"):$("dlgNo")).focus();
   const done=v=>{$("dlg").hidden=true;$("dlgBack").hidden=true;$("dlgYes").onclick=$("dlgNo").onclick=$("dlgBack").onclick=null;res(v)};
-  $("dlgYes").onclick=()=>done(true);$("dlgNo").onclick=()=>done(false);$("dlgBack").onclick=()=>done(false);
+  $("dlgYes").onclick=()=>done(true);$("dlgNo").onclick=()=>done(false);$("dlgBack").onclick=opts.must?null:()=>done(false);
 })}
 let revealed=false;
 /* ---------- greetings ---------- */
@@ -1147,7 +1156,72 @@ function apply(j){
   $("syncPill").textContent="Saved"; render(); renderSettings(true); renderManage(); renderBackup();
   if(!revealed){setTimeout(greet,700);revealed=true;$("skel").hidden=true;const t=$("todayContent");t.hidden=false;t.classList.add("reveal");}
 }
-async function persist(){store.savedAt=new Date().toISOString(); await idbSet("state",store);}
+async function persist(){store.savedAt=new Date().toISOString(); await idbSet("state",store); if(typeof queueSync==="function") queueSync();}
+
+/* ---------- Google account + Drive sync (optional) ---------- */
+const GOOGLE_CLIENT_ID=""; // OAuth Web client ID from Google Cloud (origin https://bujjet.com)
+const G_SCOPE="https://www.googleapis.com/auth/drive.appdata openid email profile", SYNC_FILE="bujjet-sync.json";
+let gTok=null, syncing=false, syncT=0;
+try{const t=JSON.parse(localStorage.getItem("bujjet.gtok")||"null"); if(t&&t.exp>Date.now()) gTok=t;}catch(e){}
+const gReady=()=>!!GOOGLE_CLIENT_ID;
+function syncMeta(){try{return JSON.parse(localStorage.getItem("bujjet.sync")||"null")}catch(e){return null}}
+function setSyncMeta(m){try{if(m)localStorage.setItem("bujjet.sync",JSON.stringify(m));else{localStorage.removeItem("bujjet.sync");localStorage.removeItem("bujjet.gtok")}}catch(e){}}
+const tokValid=()=>gTok&&gTok.exp>Date.now()+60000;
+function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
+  const s=document.createElement("script");s.src="https://accounts.google.com/gsi/client";s.async=true;s.onload=()=>res();s.onerror=()=>rej(new Error("Couldn't reach Google. Check your connection."));document.head.appendChild(s)})}
+async function getToken(first){ if(tokValid()) return gTok.t;
+  if(!gReady()) throw new Error("Google sign-in isn't available yet.");
+  await loadGis(); const m=syncMeta();
+  return new Promise((res,rej)=>{const c=google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:G_SCOPE,hint:(m&&m.email)||undefined,
+    callback:r=>{ if(r.error) return rej(new Error("Couldn't sign in to Google"));
+      if(!google.accounts.oauth2.hasGrantedAllScopes(r,"https://www.googleapis.com/auth/drive.appdata")) return rej(new Error("Allow Google Drive access so bujjet can sync"));
+      gTok={t:r.access_token,exp:Date.now()+(Number(r.expires_in)||3600)*1000}; try{localStorage.setItem("bujjet.gtok",JSON.stringify(gTok))}catch(e){} res(gTok.t)},
+    error_callback:e=>rej(new Error(e&&e.type==="popup_closed"?"Sign-in cancelled":"Couldn't open Google sign-in. Allow pop-ups and try again."))});
+    c.requestAccessToken({prompt:first?"select_account":""})});}
+async function gfetch(url,opt){opt=opt||{}; if(!tokValid()) throw new Error("signin"); const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:"Bearer "+gTok.t}});
+  if(r.status===401){gTok=null; throw new Error("signin")} if(!r.ok) throw new Error("Google Drive error ("+r.status+")"); return r}
+async function driveFind(){const q=encodeURIComponent(`name='${SYNC_FILE}'`);
+  const j=await (await gfetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime,appProperties)&orderBy=modifiedTime desc`)).json(); return (j.files||[])[0]||null}
+async function driveRead(id){return (await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).json()}
+async function driveWrite(id,obj){const meta={name:SYNC_FILE,mimeType:"application/json",appProperties:{savedAt:(obj.state&&obj.state.savedAt)||""}}; if(!id) meta.parents=["appDataFolder"];
+  const b="bujjet"+Math.random().toString(36).slice(2), body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(obj)}\r\n--${b}--`;
+  const url=id?`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart&fields=id`:`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`;
+  return (await (await gfetch(url,{method:id?"PATCH":"POST",headers:{"Content-Type":"multipart/related; boundary="+b},body})).json()).id}
+async function gUser(){return (await gfetch("https://www.googleapis.com/oauth2/v3/userinfo")).json()}
+async function pullRemote(f){const j=await driveRead(f.id); const st=j.state||j; if(!st||!st.config) throw new Error("The Drive copy isn't a bujjet backup");
+  store={config:st.config,expenses:st.expenses||[],paydays:st.paydays||{},savedAt:st.savedAt||(f.appProperties||{}).savedAt||new Date().toISOString()};
+  ensureCash(store.config); await idbSet("state",store); return store.savedAt}
+async function pushLocal(f){const id=await driveWrite(f&&f.id,{app:"bujjet",format:1,exportedAt:new Date().toISOString(),state:store}); return id}
+function syncPillText(t,cls){const p=$("syncPill"); if(!p) return; p.className="pill "+(cls||"info"); p.textContent=t;}
+// opts.user: started by a tap (may open Google sign-in). Returns "pulled" | "pushed" | "same" | "skipped".
+async function syncNow(opts){opts=opts||{}; const m=syncMeta(); if(!m||!gReady()||syncing) return "skipped";
+  if(!tokValid()){ if(!opts.user){ syncPillText("Tap to sync","warn"); return "skipped"} await getToken(false); }
+  syncing=true; syncPillText("Syncing…","info saving");
+  try{ const f=await driveFind(), rs=f?((f.appProperties||{}).savedAt||""):"", base=m.syncedAt||"", local=(store&&store.config)?(store.savedAt||""):"";
+    let did="same";
+    if(!local&&f){ m.syncedAt=await pullRemote(f); did="pulled"; }
+    else if(!local){ did="same"; }
+    else if(!f){ m.fileId=await pushLocal(null); m.syncedAt=local; did="pushed"; }
+    else if(rs===local){ m.syncedAt=local; }
+    else { const remoteNew=rs>base, localNew=local>base||!base;
+      let useRemote=remoteNew&&!localNew;
+      if(remoteNew&&localNew){ syncing=false; useRemote=!(await confirmBox(base?"Changes on two devices":"bujjet data found in your Google Drive",
+          `Your Google Drive has a copy saved ${new Date(rs).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}. Keep the data on this phone, or replace it with the Drive copy?`,{yes:"Keep this phone's",no:"Use Drive copy",primary:true,must:true})); syncing=true; }
+      if(useRemote){ m.syncedAt=await pullRemote(f); did="pulled"; } else { m.fileId=await pushLocal(f); m.syncedAt=local; did="pushed"; } }
+    m.lastSync=new Date().toISOString(); setSyncMeta(m);
+    if(did==="pulled"&&store&&store.config){ apply(store); toast("Updated from Google Drive"); }
+    syncPillText("Synced ✓","good"); setTimeout(()=>{const p=$("syncPill"); if(p&&/Synced ✓/.test(p.textContent)) syncPillText("Synced")},1600);
+    if(typeof renderManage==="function"&&config) renderManage(); return did;
+  }catch(e){ if(e&&e.message==="signin"){ syncPillText("Tap to sync","warn"); if(opts.user) toast("Sign in to Google again to sync"); }
+    else { syncPillText("Sync failed","bad"); if(opts.user) toast(e&&e.message&&e.message.length<90?e.message:"Couldn't sync. Try again."); }
+    return "skipped"; }
+  finally{ syncing=false; } }
+function queueSync(){ if(!syncMeta()||!gReady()) return; clearTimeout(syncT); syncT=setTimeout(()=>syncNow({}),4000); }
+async function connectGoogle(){ if(!gReady()){toast("Google sign-in isn't available yet.");return null}
+  try{ await getToken(true); const u=await gUser(); setSyncMeta({email:u.email,gname:u.name||"",connectedAt:new Date().toISOString(),syncedAt:""});
+    const did=await syncNow({user:true}); return {user:u,did}; }
+  catch(e){ toast(e&&e.message&&e.message.length<90?e.message:"Couldn't connect Google"); return null } }
+function disconnectGoogle(){ try{ if(gTok&&window.google&&google.accounts&&google.accounts.oauth2) google.accounts.oauth2.revoke(gTok.t,()=>{}); }catch(e){} gTok=null; setSyncMeta(null); syncPillText("Saved"); }
 async function call(action,data){
   if(!store) throw new Error("no_data");
   if(action==="add") store.expenses.push(data.expense);
@@ -1237,6 +1311,13 @@ function startOnboarding(){
     debts:[],cards:[],subs:[]};
   $("onb").hidden=false; document.body.classList.add("onbopen"); drawOnb();
 }
+const BENEFITS=[
+  ["Plans around the 15th and 30th.","Every payday gets its own plan, not one big monthly number."],
+  ["Knows how cards really work here.","Installments, Cash2Go, interest-free terms and payments made ahead, all tracked month by month."],
+  ["Shows money you actually have.","Your real balance next to your plan, so the number never lies."],
+  ["Short pay? It adjusts.","Bills and cards stay covered first; spending is trimmed for you."],
+  ["Private by default.","No bank logins, no ads, no tracking. Works offline."],
+  ["Optional Google sync.","Back up to your own Google Drive and use it on a new phone. Or skip it, no account needed."]];
 const ONB_STEPS=["welcome","you","accounts","spend","bills","debts","cards","subs","done"];
 function drawOnb(){
   const st=ONB_STEPS[onb.i], body=$("onbBody"); body.textContent="";
@@ -1244,7 +1325,14 @@ function drawOnb(){
   $("onbBack").hidden=onb.i===0; $("onbNext").textContent=st==="welcome"?"Get started":st==="done"?"Open bujjet":"Next";
   const h=(t,p)=>{const x=document.createElement("div");x.innerHTML=`<h1 class="onbh">${t}</h1>${p?`<p class="muted">${p}</p>`:""}`;body.appendChild(x)};
   const host=()=>{const d=document.createElement("div");body.appendChild(d);return d};
-  if(st==="welcome"){h("Know what's left until payday.","bujjet plans every kinsenas and katapusan for you: cards, bills, and what's left to spend. Everything stays on this phone. No sign-up needed.");
+  if(st==="welcome"){h("Know what's left until payday.","A budget app built for kinsenas and katapusan. Plan every payday, track your cards and installments, and see the money you really have left.");
+    const ul=document.createElement("ul");ul.className="benefits";ul.innerHTML=BENEFITS.map(([t,d])=>`<li><strong>${t}</strong> ${d}</li>`).join("");body.appendChild(ul);
+    if(gReady()){const g=document.createElement("button");g.type="button";g.className="gbtn";g.innerHTML=GLOGO+"<span>Continue with Google</span>";
+      g.onclick=async()=>{const r=await connectGoogle(); if(!r) return;
+        if(r.did==="pulled"&&store&&store.config){$("onb").hidden=true;document.body.classList.remove("onbopen");apply(store);toast("Welcome back! Your data is loaded from Google Drive.");return}
+        if(!onb.name&&r.user) onb.name=r.user.given_name||r.user.name||""; toast("Connected as "+r.user.email+". Let's set up your budget."); onb.i++; drawOnb(); window.scrollTo(0,0);};
+      body.appendChild(g);
+      const n=document.createElement("p");n.className="small muted onbnote";n.textContent="Or tap Get started to use bujjet without an account. You can connect Google later in Settings.";body.appendChild(n);}
     const imp=document.createElement("button");imp.type="button";imp.className="ghost";imp.style.justifySelf="start";imp.textContent="I have a backup file → Import";imp.onclick=()=>$("importFile").click();body.appendChild(imp);
     const lg=document.createElement("p");lg.className="small muted";lg.innerHTML='By continuing you agree to the <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy notice</a>. bujjet is a tracker, not financial advice.';body.appendChild(lg);}
   if(st==="you"){h("About you","Paydays are the 15th and the 30th (or the last day of the month).");
@@ -1285,7 +1373,7 @@ function finishOnbPreview(body){
    <tr><td>Spending money (half)</td><td class="n">−${peso2(sp/2)}</td></tr>
    <tr class="total"><td>${left<0?"Short each payday":"Left over to save"}</td><td class="n">${peso2(left)}</td></tr></tbody></table></div>
    ${left<0?'<p class="small" style="color:var(--warn)">Your plan is short. bujjet will trim spending categories automatically on each payday, but you may want to lower some budgets.</p>':""}
-   <p class="small muted">Tip: export a backup now and then from the Budget tab. Your data only lives on this phone.</p>`;
+   ${syncMeta()?'<p class="small muted">Connected to Google. bujjet will keep a copy in your Google Drive.</p>':'<p class="small muted">Your data lives on this phone. Connect Google in Settings for automatic backup, or save a backup file now and then.</p>'}`;
   body.appendChild(x);
 }
 $("onbBack").onclick=()=>{if(onb.i>0){onb.i--;drawOnb();window.scrollTo(0,0)}};
@@ -1300,16 +1388,34 @@ $("onbNext").onclick=async()=>{
 
 /* ---------- manage (edit setup later) ---------- */
 let mgSave=null;
-function openManage(title,help,draw,save){$("mgTitle").textContent=title;$("mgHelp").textContent=help||"";const b=$("mgBody");b.textContent="";draw(b);mgSave=save;$("mgBack").hidden=false;$("mgDlg").hidden=false}
+function openManage(title,help,draw,save){$("mgTitle").textContent=title;$("mgHelp").textContent=help||"";const b=$("mgBody");b.textContent="";draw(b);mgSave=save;$("mgSave").hidden=!save;$("mgBack").hidden=false;$("mgDlg").hidden=false}
 function closeManage(){$("mgDlg").hidden=true;$("mgBack").hidden=true;mgSave=null}
 $("mgClose").onclick=closeManage; $("mgBack").onclick=closeManage;
 $("mgSave").onclick=async()=>{if(!mgSave)return;try{await mgSave();closeManage();toast("Saved")}catch(e){toast(e&&e.message&&e.message.length<80?e.message:"Couldn't save. Try again.")}};
+function googleSub(){ if(!gReady()) return "Coming soon: back up and sync to your Google Drive"; const m=syncMeta();
+  if(!m) return "Not connected · optional backup and sync to your Google Drive";
+  return m.email+(m.lastSync?" · synced "+new Date(m.lastSync).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):""); }
+function openGoogle(){ const m=syncMeta();
+  if(!gReady()){ openManage("Google account","",b=>{b.innerHTML='<p class="muted">Google sign-in is coming soon. You\'ll be able to back up and sync bujjet to your own Google Drive. Until then, use Backup & data to save a backup file.</p>'},null); return; }
+  if(!m){ openManage("Google account","",b=>{b.innerHTML=`<div class="gpitch"><p>Connect Google to keep bujjet backed up and in sync across your phones.</p>
+      <ul class="benefits small"><li>Saved in a private bujjet folder in <strong>your own</strong> Google Drive</li><li>bujjet has no server. Your data goes straight from this phone to your Drive.</li><li>Syncs a few seconds after each change</li><li>Disconnect any time. Your data stays on this phone.</li></ul>
+      <button class="gbtn" type="button" id="gConn">${GLOGO}<span>Continue with Google</span></button></div>`;
+      $("gConn").onclick=async()=>{const r=await connectGoogle(); if(r){closeManage(); renderManage(); toast(r.did==="pulled"?"Connected · data loaded from Drive":"Connected as "+r.user.email)}}},null); return; }
+  openManage("Google account","",b=>{b.innerHTML=`<div class="onbform"><div><strong>${esc(m.email)}</strong><div class="small muted">${m.lastSync?"Last synced "+esc(new Date(m.lastSync).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})):"Not synced yet"}</div></div>
+      <p class="small muted">bujjet saves to a private app folder in your Google Drive a few seconds after each change. When you open bujjet on another phone and connect the same account, your data comes with you.</p>
+      <button class="primary" type="button" id="gSync">Sync now</button><button class="secondary" type="button" id="gOff">Disconnect Google</button></div>`;
+    $("gSync").onclick=async()=>{const d=await syncNow({user:true}); if(d!=="skipped"){closeManage(); toast(d==="pulled"?"Updated from Google Drive":"Synced")}};
+    $("gOff").onclick=async()=>{closeManage(); if(!(await confirmBox("Disconnect Google?","bujjet stops syncing. Your data stays on this phone, and the copy in your Drive stays there too.",{yes:"Disconnect"})))return; disconnectGoogle(); renderManage(); toast("Google disconnected")}},null); }
+const GLOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
 function renderManage(){
   if(!config||!$("mg-you")) return; ["mg-you","mg-money","mg-budget"].forEach(id=>$(id).textContent="");
   const B=balances();
   const rows=[
-    ["You & pay",`${config.name||"No name"} · ${peso(config.incomePerPayday)} per payday`,()=>openManage("You & pay","",b=>{b.innerHTML=`<div class="onbform"><label><span class="small muted">Your name</span><input id="mName"></label><label><span class="small muted">Take-home pay per payday (₱)</span><input id="mInc" inputmode="decimal"></label></div>`;$("mName").value=config.name||"";$("mInc").value=config.incomePerPayday},
-      async()=>{const inc=n2($("mInc").value);if(!(inc>0))throw new Error("Enter your pay per payday");await call("setConfig",{patch:{name:$("mName").value.trim(),incomePerPayday:inc}})})],
+    ["Name",config.name||"Add your name",()=>openManage("Your name","Used for greetings.",b=>{b.innerHTML=`<div class="onbform"><label><span class="small muted">Name</span><input id="mName" autocomplete="given-name"></label></div>`;$("mName").value=config.name||""},
+      async()=>{await call("setConfig",{patch:{name:$("mName").value.trim().slice(0,40)}})})],
+    ["Google account",googleSub(),openGoogle],
+    ["Pay",`${peso(config.incomePerPayday)} per payday · 15th and 30th`,()=>openManage("Your pay","Take-home pay you expect each payday. You can still enter the actual amount on each payday in the Paydays tab.",b=>{b.innerHTML=`<div class="onbform"><label><span class="small muted">Take-home pay per payday (₱)</span><input id="mInc" inputmode="decimal"></label></div>`;$("mInc").value=config.incomePerPayday},
+      async()=>{const inc=n2($("mInc").value);if(!(inc>0))throw new Error("Enter your pay per payday");await call("setConfig",{patch:{incomePerPayday:inc}})})],
     ["Accounts & wallets",ACC().map(a=>a.name).join(", ")||"None",()=>{const d=ACC().map(a=>({id:a.id,name:a.name,balance:Math.round(B[a.id].bal*100)/100,spendable:a.spendable!==false}));
       openManage("Accounts & wallets","Changing a balance resets tracking for that account from today.",b=>listEditor(b,d,F.accounts,"Add account",{name:"",balance:"",spendable:true}),
       async()=>{const prev=ACC().map(a=>({...a,_bal:B[a.id].bal}));const accounts=buildAccounts(d,prev).map(a=>{const o={...a};delete o._bal;return o});if(!accounts.length)throw new Error("Keep at least one account");
@@ -1332,7 +1438,7 @@ function renderManage(){
     ["Subscriptions",config.subs.map(x=>x.name).join(", ")||"None",()=>{const d=config.subs.map(x=>({...x}));
       openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>{const old=(config.subs||[]).find(o=>o.name===x.name.trim()&&o.card===x.card);return x.card?{name:x.name.trim(),amount:n2(x.amount),card:x.card,from:old&&old.from||mkey(new Date())}:{name:x.name.trim(),amount:n2(x.amount)}})}})})}],
   ];
-  const grp={"You & pay":"mg-you","Accounts & wallets":"mg-money","Credit cards":"mg-money","Installments & loans":"mg-money","Spending categories":"mg-budget","Bills":"mg-budget","Subscriptions":"mg-budget"};
+  const grp={"Name":"mg-you","Google account":"mg-you","Pay":"mg-you","Accounts & wallets":"mg-money","Credit cards":"mg-money","Installments & loans":"mg-money","Spending categories":"mg-budget","Bills":"mg-budget","Subscriptions":"mg-budget"};
   rows.forEach(([t,sub,fn])=>{const L=$(grp[t]||"mg-budget");const r=document.createElement("button");r.type="button";r.className="item mgrow";r.innerHTML='<span class="t"><strong></strong><span class="small muted"></span></span><span></span><span class="chev">›</span>';
     r.querySelector("strong").textContent=t;r.querySelector(".t .small").textContent=sub;r.onclick=fn;L.appendChild(r)});
 }
@@ -1352,6 +1458,7 @@ function askPassword(title,text,btn){return new Promise(res=>{$("pwTitle").textC
   $("pwYes").onclick=()=>done($("pwIn").value);$("pwNo").onclick=()=>done(null);$("pwBack").onclick=()=>done(null);})}
 function renderBackup(){const i=$("backupInfo");if(!i||!config)return;const last=config.lastExport;
   const days=last?Math.floor((Date.now()-new Date(last))/864e5):null;
+  const gm=syncMeta(); if(gm){i.textContent=`Synced to Google Drive (${gm.email}). ${last?`Last backup file: ${days===0?"today":days+" day"+(days>1?"s":"")+" ago"}.`:""} You can still save a backup file any time.`; return;}
   i.textContent=`Your data is saved only on this phone. ${last?`Last backup: ${days===0?"today":days+" day"+(days>1?"s":"")+" ago"}.`:"You haven't exported a backup yet."} Export a backup to move to another device or keep a copy.`;
   if(days==null||days>=14) setNotice(last?`It's been ${days} days since your last backup. Export one from the Budget tab.`:""); }
 async function doExport(mode){
@@ -1389,7 +1496,9 @@ $("importFile").onchange=async ev=>{const f=ev.target.files[0]; ev.target.value=
 $("eraseBtn").onclick=async()=>{if(!(await confirmBox("Erase everything?","This deletes all your bujjet data on this phone. Export a backup first if you want to keep it.",{yes:"Erase"})))return;
   try{await idbSet("state",null);localStorage.removeItem("bujjet.state")}catch(e){} location.reload()};
 
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&store&&store.config){now=new Date();render()}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&store&&store.config){now=new Date();render();if(syncMeta())syncNow({})}});
+$("syncPill").onclick=()=>{if(syncMeta())syncNow({user:true})};
+setTimeout(()=>{if(syncMeta()&&store&&store.config)syncNow({})},1500);
 if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 
 /* ---------- touch, sound and save feedback ---------- */
