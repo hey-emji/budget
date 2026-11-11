@@ -30,6 +30,7 @@ jobs:
           SRC=android/app/src/main/java/com/bujjet/app
           mkdir -p $SRC
           cp native/java/*.java $SRC/
+          mkdir -p android/app/src/main/res/drawable && cp native/res/drawable/*.xml android/app/src/main/res/drawable/
           python3 - <<'PY'
           p='android/app/src/main/AndroidManifest.xml'
           s=open(p).read()
@@ -40,6 +41,13 @@ jobs:
           </application>'''
           if 'NotifService' not in s:
               s=s.replace('</application>',svc,1)
+          tile='''        <service android:name=".LogTile" android:label="Log to bujjet" android:icon="@drawable/ic_tile" android:exported="true"
+                  android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+                  <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+              </service>
+          </application>'''
+          if 'LogTile' not in s:
+              s=s.replace('</application>',tile,1)
           filt='''<intent-filter android:label="Log to bujjet">
                       <action android:name="android.intent.action.PROCESS_TEXT" />
                       <category android:name="android.intent.category.DEFAULT" />

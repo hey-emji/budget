@@ -42,6 +42,16 @@ public class NotifReaderPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void readClipboard(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            JSObject r = new JSObject();
+            String t = MainActivity.readClipboard(getContext());
+            r.put("text", t == null ? "" : (t.length() > 1500 ? t.substring(0, 1500) : t));
+            call.resolve(r);
+        });
+    }
+
+    @PluginMethod
     public void takePending(PluginCall call) {
         try {
             JSONArray q = NotifStore.take(getContext());

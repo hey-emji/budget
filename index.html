@@ -151,6 +151,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .ibx{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:10px 0;border-top:1px solid var(--line)}
 .ibx:first-child{border-top:none}.ibx .amt{font-weight:700;text-align:right}.ibx .acts{grid-column:1/-1;display:flex;gap:8px}
 .ibx .acts button{padding:7px 12px;font-size:13px}
+.clipcard{display:grid;gap:10px;border-color:var(--accent)}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -278,6 +279,10 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
         <div class="row"><span class="eyebrow muted" id="heroLabel">Left until payday</span><span class="pill info" id="heroPayday"></span></div>
         <div class="big" id="heroLeft">—</div>
         <div class="muted small" id="heroSub"></div>
+      </div>
+      <div class="card clipcard" id="clipCard" hidden>
+        <div class="row"><div><div class="small muted">You copied a transaction</div><strong id="clipWhat"></strong></div><button class="ghost" type="button" id="clipNo" aria-label="Ignore">✕</button></div>
+        <button class="primary" type="button" id="clipYes">Log it</button>
       </div>
       <div class="card" id="inboxCard" hidden>
         <div class="row"><h2>To review</h2><span class="pill warn" id="inboxCount"></span></div>
@@ -1255,12 +1260,23 @@ function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INB
     no.onclick=async()=>{ await dropInbox(it.id); toast("Dismissed"); };
     host.appendChild(d); }); }
 /* ---------- automatic detection (Android app) ---------- */
+let clipRead=null;
+const hashStr=t=>{let h=0;for(let i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))|0;return String(h)};
+async function checkClipboard(){ if(!NR||!store||!store.config) return; let t=""; try{ t=((await NR.readClipboard())||{}).text||""; }catch(e){ return; }
+  const card=$("clipCard"); if(!t||!/\d/.test(t)){ card.hidden=true; return; }
+  const h=hashStr(t); let seen=""; try{ seen=localStorage.getItem("bujjet.clipSeen")||""; }catch(e){}
+  if(seen===h){ card.hidden=true; return; }
+  const m=parseMessage(t); if(!m){ card.hidden=true; return; }
+  clipRead={m,h}; $("clipWhat").textContent=(m.type==="income"?"+":"")+peso2(m.amount)+(m.who?" · "+m.who:m.source?" · "+m.source:""); card.hidden=false; }
+function clipDone(){ try{ if(clipRead) localStorage.setItem("bujjet.clipSeen",clipRead.h); }catch(e){} $("clipCard").hidden=true; }
+$("clipNo").onclick=clipDone;
+$("clipYes").onclick=()=>{ const m=clipRead&&clipRead.m; clipDone(); if(!m) return; closeAllForPick(); openSheet(); fillFromReading(m,"paste"); $("readNote").textContent="Read from the message you copied"+(m.source?" ("+m.source+")":"")+". Check it, then save."; };
 function closeAllForPick(){ try{ if(curView==="prefs") closePrefs(); closeIns(); closeManage(); }catch(e){} }
 const SMS_APP=/messag|mms|sms|\.mms|conversations/i;
 async function pullCaptured(){ if(!NR||!store||!store.config) return; let r; try{ r=await NR.takePending(); }catch(e){ return; }
   const items=(r&&r.items)||[], found=[];
   for(const it of items){ const title=String(it.title||""), body=String(it.text||"");
-    if(it.pkg==="bujjet.selection"){ const m=parseMessage(body)||parseReceipt(body); closeAllForPick(); openSheet(); fillFromReading(m,"paste"); if(m) $("readNote").textContent="Read from the text you selected"+(m.source?" ("+m.source+")":"")+". Check it, then save."; continue; }
+    if(it.pkg==="bujjet.selection"){ try{ localStorage.setItem("bujjet.clipSeen",hashStr(body)); }catch(e){} $("clipCard").hidden=true; const m=parseMessage(body)||parseReceipt(body); closeAllForPick(); openSheet(); fillFromReading(m,"paste"); if(m) $("readNote").textContent="Read from the text you selected"+(m.source?" ("+m.source+")":"")+". Check it, then save."; continue; }
     if(SMS_APP.test(it.pkg||"")&&!PH_SOURCES.some(([,re])=>re.test(title))&&!/^[A-Z0-9]{2,12}$/.test(title)) continue; // SMS only from bank-style senders, not people
     const m=parseMessage(title+". "+body,{hint:(it.app||"")+" "+title}); if(!m) continue;
     if(!m.date&&it.time) m.date=ymd(new Date(Number(it.time))); m.via=it.app||""; found.push(m); }
@@ -1272,7 +1288,7 @@ function openAuto(){ autoStatus().then(on=>openManage("Detect transactions autom
     <button class="${on?"secondary":"primary"}" type="button" id="autoGo">${on?"Open notification access settings":"Turn on"}</button>
     ${on?"":'<p class="small muted">Android will open Notification access. Find <strong>bujjet</strong>, switch it on and confirm. If it says the setting is restricted, open App info for bujjet → ⋮ → Allow restricted settings, then try again.</p>'}</div>`;
   $("autoGo").onclick=async()=>{ try{ await NR.openSettings(); }catch(e){} closeManage(); };},null)); }
-if(NR){ try{ NR.addListener("captured",()=>pullCaptured()); }catch(e){} document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ pullCaptured(); renderManage(); } }); setTimeout(()=>pullCaptured(),1200); }
+if(NR){ try{ NR.addListener("captured",()=>pullCaptured()); }catch(e){} document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ pullCaptured(); renderManage(); setTimeout(checkClipboard,500); } }); setTimeout(()=>{pullCaptured(); checkClipboard();},1200); }
 /* ---------- things shared to bujjet from other apps ---------- */
 async function processShared(){ if(!/[?&]shared=1/.test(location.search)) return; history.replaceState(null,"",location.pathname);
   if(!("caches" in window)) return; const c=await caches.open("bujjet-share"); const keys=await c.keys(); if(!keys.length) return;
