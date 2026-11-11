@@ -67,6 +67,12 @@ h2{font-size:16px;font-weight:700}
 .bar.good>span{background:var(--ink)} .bar.warn>span{background:var(--warn)} .bar.bad>span{background:var(--bad)}
 .cat{display:grid;gap:6px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
+#addForm{max-height:calc(100dvh - 24px - env(safe-area-inset-top));overflow-y:auto;overscroll-behavior:contain;gap:10px}
+#addForm .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:2px 18px;scroll-padding:0 18px;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 22px),transparent)}
+#addForm .chips::-webkit-scrollbar{display:none}
+#addForm .chip{flex:none;padding:7px 12px;font-size:13.5px}
+#addForm .amount input{font-size:38px}
+#addForm .tools .tool{padding:6px 11px}
 .chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 13px;border-radius:999px;font:500 14px var(--body);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 input,select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%}
@@ -615,7 +621,7 @@ function balances(){
     const paid=sum(expenses.filter(e=>ok(e)&&e.cat==="credit"&&e.ref===c.id),e=>e.amount);
     out[c.id]={...c,owed:c.start+buys-paid,buys,paid};});
   return out;}
-function pickAcct(id){selAcct=id;document.querySelectorAll("#acctChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===id))}
+function pickAcct(id){selAcct=id;document.querySelectorAll("#acctChips .chip").forEach(x=>{const on=x.dataset.id===id;x.setAttribute("aria-pressed",on);if(on)requestAnimationFrame(()=>{const p=x.parentElement;if(p&&p.scrollWidth>p.clientWidth)p.scrollTo({left:Math.max(0,x.offsetLeft-p.clientWidth/2+x.offsetWidth/2),behavior:"smooth"})})})}
 function setMode(mode,keepCat,keepAcct){sheetMode=mode; const chips=$("catChips"); chips.textContent="";
   const list=mode==="inc"?INC:mode==="xfer"?XTO():CATS().filter(c=>c.id!=="credit");
   const al=$("acctChips"); al.textContent=""; const alist=mode==="inc"?GOES():mode==="xfer"?XFROM():PAYW();
@@ -1043,7 +1049,7 @@ function compactHero(on){if(on===isCompact)return;isCompact=on;heroEl.classList.
 window.addEventListener("scroll",()=>{const y=window.scrollY; if(!isCompact&&y>110)compactHero(true); else if(isCompact&&y<30)compactHero(false)},{passive:true});
 $("dt").value=ymd(new Date());
 let ctx=null;
-function pickCat(id){selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===id))}
+function pickCat(id){selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>{const on=x.dataset.id===id;x.setAttribute("aria-pressed",on);if(on)requestAnimationFrame(()=>{const p=x.parentElement;if(p&&p.scrollWidth>p.clientWidth)p.scrollTo({left:Math.max(0,x.offsetLeft-p.clientWidth/2+x.offsetWidth/2),behavior:"smooth"})})})}
 function buildQuick(){const q=$("quick");q.textContent="";
   const counts={};expenses.filter(e=>e.note&&!/estimated/i.test(e.note)&&e.cat!=="utilities"&&e.cat!=="credit"&&!isInc(e)).forEach(e=>{const k=e.cat+"|"+e.note.toLowerCase();const c=counts[k]||(counts[k]={note:e.note,cat:e.cat,n:0,amount:e.amount,ts:""});c.n++;if((e.date+e.ts)>c.ts){c.ts=e.date+e.ts;c.amount=e.amount}});
   const learned=Object.values(counts).filter(c=>c.n>=2).sort((a,b)=>b.n-a.n).slice(0,4);
