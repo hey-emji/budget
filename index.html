@@ -112,6 +112,23 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
+#todayHero{cursor:pointer}#heroLabel::after{content:"  ›";opacity:.7}
+.insheet{max-height:90vh;overflow-y:auto;overscroll-behavior:contain}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);justify-self:center}
+.insum{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}.insum .r{text-align:right}
+.insbig{font:700 30px var(--display,var(--body));letter-spacing:-.02em}.insmid{font:600 18px var(--body)}
+.inscard{border:1px solid var(--line);border-radius:18px;padding:14px;display:grid;gap:10px}
+#insChart{width:100%;height:auto;display:block;touch-action:manipulation}
+#insChart .day{cursor:pointer;transition:opacity .15s}#insChart.sel .day{opacity:.3}#insChart.sel .day.on{opacity:1}
+.inslegend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted)}
+.inslegend i,.inskey i,.insdot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.inskey{display:flex;gap:14px}
+#insDay{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:6px}
+#insDay .row{font-size:14px}#insDay .hd{font-weight:600}
+.icat{display:grid;gap:4px;margin-top:6px}.icat .row{font-size:14px}
+.ibar{height:8px;border-radius:4px;position:relative;overflow:hidden}
+.ibar>span{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.icat .over{color:var(--bad);font-weight:600}
 .hdrright{display:flex;align-items:center;gap:8px;flex:none}
 .gear{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
 .gear svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -401,6 +418,20 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   <button class="ghost" type="button" id="edFull" style="justify-self:start"></button>
   <div class="inline"><button class="secondary" type="button" id="edNo">Cancel</button><button class="primary" type="button" id="edYes">Save</button></div>
 </div>
+<div class="backdrop" id="insBack" hidden></div>
+<div class="sheet insheet" id="insSheet" role="dialog" aria-modal="true" aria-labelledby="insTitle" hidden>
+  <div class="grab"></div>
+  <div class="row"><div><h2 id="insTitle">Your spending</h2><div class="small muted" id="insPer"></div></div><button class="ghost" type="button" id="insClose">Close</button></div>
+  <div class="insum"><div><div class="small muted">Spent this period</div><div class="insbig" id="insSpent"></div></div><div class="r"><div class="small muted">Money left to spend</div><div class="insmid" id="insMoney"></div></div></div>
+  <div class="small muted" id="insSub"></div>
+  <div class="inscard"><div class="row"><strong>Spent each day</strong><span class="small muted" id="insPace"></span></div>
+    <svg id="insChart" viewBox="0 0 320 170" role="img" aria-label="Spending per day by category"></svg>
+    <div class="inslegend" id="insLegend"></div>
+    <div id="insDay"></div></div>
+  <div class="inscard"><div class="row"><strong>Planned vs spent</strong><span class="small muted" id="insPlanTot"></span></div>
+    <div class="small muted inskey"><span><i style="background:var(--line)"></i>Planned</span><span><i style="background:var(--ink)"></i>Spent, in its category colour</span></div>
+    <div id="insCats"></div></div>
+</div>
 <div class="backdrop" id="upBack" hidden></div>
 <div class="dialog updlg" id="upDlg" role="dialog" aria-modal="true" aria-labelledby="upTitle" hidden>
   <div class="row"><h2 id="upTitle">All upcoming payments</h2><button class="ghost" type="button" id="upClose">Close</button></div>
@@ -606,6 +637,7 @@ function render(){
   const paid=sum(mine.filter(e=>e.cat==="utilities"||e.cat==="credit"),e=>e.amount);
   if(paid){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Bills and card payments (from set-asides)</span><strong></strong>';p.querySelector("strong").textContent=peso(paid);box.appendChild(p)}
   let left=totB-totS-other;
+  window._ins={per,budgets,mine,totB,spentB:totS+other};
   if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.start);
     const cb=budgetsFor(cp.start).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
     totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(cp.start).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
@@ -964,6 +996,66 @@ function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(n
 function closeUpcoming(){$("upDlg").hidden=true;$("upBack").hidden=true}
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
+/* ---------- spending breakdown sheet ---------- */
+const CAT_COLORS=[[/food|grocer|meal/i,"#3f9a62"],[/dining|eat|resto/i,"#e3a127"],[/transpo|grab|commut|gas|fuel/i,"#3f7fc7"],[/house|home/i,"#2aa3a0"],[/personal|vice|cig/i,"#9a62c6"],[/health|med/i,"#d65a8a"],[/fun|leisure|entertain/i,"#c97b2e"]];
+const EXTRA_COLORS=["#8a9a3b","#b0587a","#5d6fbf","#a07a4f"];
+function catColor(id,name,i){ if(id==="utilities"||id==="credit") return "#7d8590"; if(id==="other") return "#a8916b";
+  const hit=CAT_COLORS.find(([re])=>re.test(name||"")); return hit?hit[1]:EXTRA_COLORS[i%EXTRA_COLORS.length]; }
+let insSel=null;
+function insCats(){ const I=window._ins; const used=new Set();
+  const list=I.budgets.map((b,i)=>{let c=catColor(b.id,b.name,i); if(used.has(c)) c=EXTRA_COLORS[i%EXTRA_COLORS.length]; used.add(c); return {id:b.id,name:b.name,color:c,plan:b.amount}});
+  list.push({id:"other",name:"Other",color:catColor("other"),plan:0});
+  list.push({id:"bills",name:"Bills & payments",color:catColor("utilities"),plan:0});
+  return list; }
+const insKey=e=>e.cat==="utilities"||e.cat==="credit"?"bills":e.cat;
+function openIns(){ if(!window._ins) return; insSel=null; renderIns(); $("insBack").hidden=false; $("insSheet").hidden=false; $("insSheet").scrollTop=0; }
+function closeIns(){ $("insBack").hidden=true; $("insSheet").hidden=true; }
+function renderIns(){
+  const I=window._ins, per=I.per, cats=insCats(), byId=Object.fromEntries(cats.map(c=>[c.id,c]));
+  const days=[]; for(let d=new Date(per.start); d<per.end; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)) days.push(ymd(d));
+  const tdy=ymd(new Date()); const ents=I.mine.map(e=>({...e,k:byId[insKey(e)]?insKey(e):"other"}));
+  const total=sum(ents,e=>e.amount), bills=sum(ents.filter(e=>e.k==="bills"),e=>e.amount);
+  $("insPer").textContent=dName(per.start)+" – "+dName(new Date(per.end.getTime()-864e5));
+  $("insSpent").textContent=peso(total); $("insMoney").textContent=window._money!=null&&pOff===0?peso(window._money):"—";
+  $("insSub").textContent=`${peso(I.spentB)} from your spending plan of ${peso(I.totB)}`+(bills?` · ${peso(bills)} bills and card payments`:"");
+  // chart
+  const W=320,H=170,top=22,base=140,n=days.length,slot=(W-8)/n,bw=Math.max(6,slot*.66);
+  const perDay=I.totB/n, dayTot=days.map(d=>sum(ents.filter(e=>e.date===d),e=>e.amount));
+  const maxV=Math.max(perDay*1.4,...dayTot,1), y=v=>(base-top)*v/maxV;
+  const order=cats.map(c=>c.id);
+  let g=`<line x1="4" y1="${base}" x2="${W-4}" y2="${base}" stroke="var(--line)"/>`;
+  days.forEach((d,i)=>{const x=4+i*slot+(slot-bw)/2; let yy=base; let parts="";
+    if(d>tdy&&pOff===0){parts=`<rect x="${x}" y="${base-3}" width="${bw}" height="3" rx="1.5" fill="var(--line)"/>`;}
+    else order.forEach(id=>{const v=sum(ents.filter(e=>e.date===d&&e.k===id),e=>e.amount); if(!v) return; const h=Math.max(2,y(v)); yy-=h; parts+=`<rect x="${x}" y="${yy}" width="${bw}" height="${h}" fill="${byId[id].color}"/>`;});
+    if(dayTot[i]>0) parts=`<clipPath id="cp${i}"><rect x="${x}" y="${base-Math.max(2,y(dayTot[i]))-40}" width="${bw}" height="${Math.max(2,y(dayTot[i]))+40}" rx="3"/></clipPath><g clip-path="url(#cp${i})">${parts}</g>`;
+    g+=`<g class="day${insSel===d?" on":""}" data-d="${d}">${parts}<rect x="${4+i*slot}" y="${top-14}" width="${slot}" height="${base-top+14}" fill="transparent"/></g>`;});
+  const py=base-y(perDay);
+  g+=`<line x1="4" y1="${py}" x2="${W-4}" y2="${py}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="4 3" opacity=".6" pointer-events="none"/><text x="${W-4}" y="${py-5}" text-anchor="end" font-size="10.5" fill="var(--muted)">plan ${peso(perDay)}/day</text>`;
+  const lab=(i,t,a)=>`<text x="${4+i*slot+slot/2}" y="${base+16}" text-anchor="${a}" font-size="10.5" fill="var(--muted)">${t}</text>`;
+  g+=lab(0,dName(per.start),"start")+lab(n-1,dName(new Date(per.end.getTime()-864e5)),"end");
+  const ti=days.indexOf(tdy); if(ti>2&&ti<n-3) g+=lab(ti,"Today","middle");
+  const svg=$("insChart"); svg.innerHTML=g; svg.classList.toggle("sel",!!insSel);
+  svg.querySelectorAll(".day").forEach(el=>el.onclick=()=>{insSel=insSel===el.dataset.d?null:el.dataset.d; renderIns(); if(typeof buzz==="function") buzz(8);});
+  const elapsed=pOff===0?Math.max(1,days.filter(d=>d<=tdy).length):n;
+  $("insPace").textContent="avg "+peso(sum(dayTot.slice(0,elapsed),v=>v)/elapsed)+"/day";
+  const present=cats.filter(c=>ents.some(e=>e.k===c.id));
+  $("insLegend").innerHTML=present.map(c=>`<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("");
+  // day detail
+  const dd=$("insDay"); const sd=insSel;
+  if(!sd){dd.innerHTML=`<div class="small muted">Tap a bar to see what you spent that day.</div>`;}
+  else{ const es=ents.filter(e=>e.date===sd), dt=new Date(sd+"T00:00");
+    dd.innerHTML=`<div class="row hd"><span>${dt.toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"})}</span><span>${peso2(sum(es,e=>e.amount))}</span></div>`+
+      (es.length?es.map(e=>`<div class="row"><span style="display:flex;gap:2px;align-items:flex-start"><span class="insdot" style="background:${byId[e.k].color};margin-top:5px"></span><span>${esc(e.note||byId[e.k].name)}<br><span class="small muted">${esc(byId[e.k].name)}</span></span></span><span>${peso2(e.amount)}</span></div>`).join(""):`<div class="small muted">Nothing logged this day.</div>`); }
+  // planned vs spent
+  $("insPlanTot").textContent=peso(I.spentB)+" / "+peso(I.totB);
+  const rows=cats.filter(c=>c.plan>0||ents.some(e=>e.k===c.id)); const mx=Math.max(1,...rows.map(c=>Math.max(c.plan,sum(ents.filter(e=>e.k===c.id),e=>e.amount))));
+  $("insCats").innerHTML=rows.map(c=>{const sp=sum(ents.filter(e=>e.k===c.id),e=>e.amount), over=c.plan>0&&sp>c.plan;
+    const r=c.plan>0?`<span class="${over?"over":""}">${peso(sp)} / ${peso(c.plan)}</span>`:`<span>${peso(sp)} <span class="small muted">no plan</span></span>`;
+    return `<div class="icat"><div class="row"><span><span class="insdot" style="background:${c.color}"></span>${esc(c.name)}</span>${r}</div>`+
+      (c.plan>0?`<div class="ibar"><span style="width:${(c.plan/mx*100).toFixed(1)}%;background:var(--line)"></span></div>`:"")+
+      `<div class="ibar" style="background:transparent"><span style="width:${(sp/mx*100).toFixed(1)}%;background:${over?"var(--bad)":c.color}"></span></div></div>`}).join("");
+}
+$("todayHero").onclick=openIns; $("insClose").onclick=closeIns; $("insBack").onclick=closeIns;
 $("gearBtn").onclick=openPrefs; $("prefsBack").onclick=closePrefs; $("toPrefs").onclick=openPrefs;
 $("upClose").onclick=closeUpcoming; $("upBack").onclick=closeUpcoming;
 $("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")}; $("mXfer").onclick=()=>{if(!ctx)setMode("xfer")};
