@@ -1066,6 +1066,7 @@ function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(n
   setMode(pm,pm==="xfer"?(pre.ref?"to-"+pre.ref:pre.to):pre&&pre.cat,pre&&pre.acct);
   if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
 function closeUpcoming(){$("upDlg").hidden=true;$("upBack").hidden=true}
+function askCloseSheet(){ if(($("amt").value||"").trim()&&!(ctx&&ctx.kind==="edit")) confirmBox("Discard this entry?","You haven't saved it yet.",{yes:"Discard",no:"Keep editing"}).then(ok=>{if(ok)closeSheet()}); else closeSheet(); }
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
 /* ---------- spending breakdown sheet ---------- */
@@ -1255,7 +1256,11 @@ async function addToInbox(items){ if(!store||!store.config||!items.length) retur
     &&!(it.ref&&expenses.some(e=>e.srcRef===it.ref)));
   if(!fresh.length) return 0; await call("setInbox",{inbox:[...cur,...fresh.map(it=>({id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...it,at:new Date().toISOString()}))]}); return fresh.length; }
 async function dropInbox(id){ await call("setInbox",{inbox:INBOX().filter(x=>x.id!==id)}); }
-function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INBOX(); card.hidden=!L.length; $("inboxCount").textContent=L.length; const host=$("inboxList"); host.textContent="";
+function capStats(){ try{ return JSON.parse(localStorage.getItem("bujjet.cap")||"{}")||{}; }catch(e){ return {}; } }
+function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INBOX(); const watching=!!(NR&&window._autoOn); card.hidden=!L.length&&!watching; $("inboxCount").textContent=L.length; $("inboxCount").hidden=!L.length; const host=$("inboxList"); host.textContent="";
+  card.querySelector(".small.muted").textContent=L.length?"Found in your notifications and what you shared. Check each one, then save it, or dismiss it.":"";
+  if(!L.length&&watching){ const st=capStats(); const d=document.createElement("div"); d.className="small muted"; d.style.padding="6px 0 2px";
+    d.textContent="Nothing to review yet. New purchases, payments, transfers and money received from your bank and wallet notifications will appear here."+(st.raw?` bujjet has checked ${st.raw} payment notification${st.raw>1?"s":""} so far${st.last?", last on "+new Date(st.last).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):""}.`:" None seen yet."); host.appendChild(d); }
   L.forEach(it=>{ const d=document.createElement("div"); d.className="ibx";
     d.innerHTML=`<div><strong></strong><div class="small muted"></div></div><div class="amt"></div><div class="acts"><button class="primary" type="button">Review and save</button><button class="ghost" type="button">Dismiss</button></div>`;
     d.querySelector("strong").textContent=(it.type==="income"?"Money in":"Spent")+(cleanWho(it)?" · "+cleanWho(it):"");
@@ -1281,12 +1286,13 @@ function closeAllForPick(){ try{ if(curView==="prefs") closePrefs(); closeIns();
 const SMS_APP=/messag|mms|sms|\.mms|conversations/i;
 async function pullCaptured(){ if(!NR||!store||!store.config) return; let r; try{ r=await NR.takePending(); }catch(e){ return; }
   const items=(r&&r.items)||[], found=[];
+  if(items.length){ const st=capStats(); st.raw=(st.raw||0)+items.filter(i=>i.pkg!=="bujjet.selection").length; st.last=Date.now(); try{ localStorage.setItem("bujjet.cap",JSON.stringify(st)); }catch(e){} }
   for(const it of items){ const title=String(it.title||""), body=String(it.text||"");
     if(it.pkg==="bujjet.selection"){ try{ localStorage.setItem("bujjet.clipSeen",hashStr(body)); }catch(e){} $("clipCard").hidden=true; const m=parseMessage(body)||parseReceipt(body); closeAllForPick(); openSheet(); fillFromReading(m,"paste"); if(m) $("readNote").textContent="Read from the text you selected"+(m.source?" ("+m.source+")":"")+". Check it, then save."; continue; }
     if(SMS_APP.test(it.pkg||"")&&!PH_SOURCES.some(([,re])=>re.test(title))&&!/^[A-Z0-9]{2,12}$/.test(title)) continue; // SMS only from bank-style senders, not people
     const m=parseMessage(title+". "+body,{hint:(it.app||"")+" "+title}); if(!m) continue;
     if(!m.date&&it.time) m.date=ymd(new Date(Number(it.time))); m.via=it.app||""; found.push(m); }
-  if(!found.length) return; const n=await addToInbox(found); if(n) toast(`${n} new transaction${n>1?"s":""} to review`); }
+  if(!found.length){ renderInbox(); return; } const n=await addToInbox(found); if(n) toast(`${n} new transaction${n>1?"s":""} to review`); }
 async function autoStatus(){ if(!NR) return null; try{ return !!(await NR.isEnabled()).enabled; }catch(e){ return null; } }
 function openAuto(){ autoStatus().then(on=>openManage("Detect transactions automatically","",b=>{
   b.innerHTML=`<div class="gpitch"><p>${on?"<strong>On.</strong> bujjet is watching for purchases, payments, transfers and money received.":"bujjet can notice purchases, payments, transfers and money received from your bank, e-wallet and SMS notifications, and add them to <strong>To review</strong> for you."}</p>
@@ -1306,7 +1312,7 @@ async function processShared(){ if(!/[?&]shared=1/.test(location.search)) return
   if(!found.length){ toast("Couldn't find an amount in what you shared"); return; }
   const n=await addToInbox(found); toast(n?`${n} item${n>1?"s":""} to review on Today`:"Already in your list"); }
 /* swipe down to close bottom sheets */
-function swipeClose(el,close,backId){let y0=null,dy=0,t0=0,drag=false;
+function swipeClose(el,close,backId,mayClose){let y0=null,dy=0,t0=0,drag=false;
   el.addEventListener("touchstart",e=>{ if(e.touches.length!==1) return; const inGrab=e.target.closest(".grab,.sheethead"); if(!inGrab&&el.scrollTop>0) return;
     if(e.target.closest("input,select,textarea,#insChart")) return; y0=e.touches[0].clientY; dy=0; t0=Date.now(); drag=false;},{passive:true});
   el.addEventListener("touchmove",e=>{ if(y0==null) return; dy=e.touches[0].clientY-y0;
@@ -1314,15 +1320,17 @@ function swipeClose(el,close,backId){let y0=null,dy=0,t0=0,drag=false;
     if(e.cancelable) e.preventDefault(); el.style.transform=`translateY(${Math.max(0,dy)}px)`; const b=$(backId); if(b) b.style.opacity=String(Math.max(0.2,1-dy/400));},{passive:false});
   const end=()=>{ if(y0==null) return; const v=dy/Math.max(1,Date.now()-t0); y0=null; if(!drag) return; drag=false; const b=$(backId);
     el.style.transition="transform .22s ease"; if(b) b.style.transition="opacity .22s ease";
+    if((dy>110||v>0.6)&&mayClose&&!mayClose()){ el.style.transform=""; if(b) b.style.opacity=""; setTimeout(()=>{el.style.transition=""; if(b) b.style.transition=""},230);
+      confirmBox("Discard this entry?","You haven't saved it yet.",{yes:"Discard",no:"Keep editing"}).then(ok=>{ if(ok) close(); }); return; }
     if(dy>110||v>0.6){ el.style.transform="translateY(105%)"; if(b) b.style.opacity="0"; setTimeout(()=>{close(); el.style.transform=""; el.style.transition=""; if(b){b.style.opacity="";b.style.transition=""}},200); }
     else { el.style.transform=""; if(b) b.style.opacity=""; setTimeout(()=>{el.style.transition=""; if(b) b.style.transition=""},230); } };
   el.addEventListener("touchend",end); el.addEventListener("touchcancel",end); }
-swipeClose($("insSheet"),closeIns,"insBack"); swipeClose($("addForm"),closeSheet,"backdrop");
+swipeClose($("insSheet"),closeIns,"insBack"); swipeClose($("addForm"),closeSheet,"backdrop",()=>!(($("amt").value||"").trim()&&!(ctx&&ctx.kind==="edit")));
 $("todayHero").onclick=openIns; $("insClose").onclick=closeIns; $("insBack").onclick=closeIns;
 $("gearBtn").onclick=openPrefs; $("prefsBack").onclick=closePrefs; $("toPrefs").onclick=openPrefs;
 $("upClose").onclick=closeUpcoming; $("upBack").onclick=closeUpcoming;
 $("mExp").onclick=()=>{if(!ctx)setMode("exp")}; $("mInc").onclick=()=>{if(!ctx)setMode("inc")}; $("mXfer").onclick=()=>{if(!ctx)setMode("xfer")};
-$("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=closeSheet; $("closeSheet").onclick=closeSheet;
+$("perPrev").onclick=()=>{pOff++;render()}; $("perNext").onclick=()=>{if(pOff>0){pOff--;render()}}; $("backdrop").onclick=askCloseSheet; $("closeSheet").onclick=closeSheet;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("addForm").hidden)closeSheet()});
 
 function confirmBox(title,text,opts){opts=opts||{};return new Promise(res=>{
@@ -1643,7 +1651,7 @@ function openGoogle(){ const m=syncMeta();
     $("gSync").onclick=async()=>{const d=await syncNow({user:true}); if(d!=="skipped"){closeManage(); toast(d==="pulled"?"Updated from Google Drive":"Synced")}};
     $("gOff").onclick=async()=>{closeManage(); if(!(await confirmBox("Disconnect Google?","bujjet stops syncing. Your data stays on this phone, and the copy in your Drive stays there too.",{yes:"Disconnect"})))return; disconnectGoogle(); renderManage(); toast("Google disconnected")}},null); }
 const GLOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
-function refreshAuto(){ autoStatus().then(on=>{ if(on!==null&&on!==window._autoOn){ window._autoOn=on; renderManage(); } }); }
+function refreshAuto(){ autoStatus().then(on=>{ if(on!==null&&on!==window._autoOn){ window._autoOn=on; renderManage(); renderInbox(); } }); }
 function renderManage(){ if(NR) setTimeout(refreshAuto,0);
   if(!config||!$("mg-you")) return; ["mg-you","mg-money","mg-budget"].forEach(id=>$(id).textContent="");
   const B=balances();
@@ -1752,12 +1760,17 @@ setTimeout(()=>{processShared().catch(()=>{})},900);
     if(vis("upDlg")){ closeUpcoming(); return true; }
     if(vis("insSheet")){ closeIns(); return true; }
     if(vis("addForm")){ const typed=($("amt").value||"").trim()&&!(ctx&&ctx.kind==="edit");
+      if(vis("dlg")) return true;
       if(typed){ confirmBox("Discard this entry?","You haven't saved it yet.",{yes:"Discard",no:"Keep editing"}).then(ok=>{ if(ok) closeSheet(); }); return true; }
       closeSheet(); return true; }
     if(vis("onb")){ if(onb&&onb.i>0){ $("onbBack").click(); return true; } return false; }
     if(curView==="prefs"){ closePrefs(); return true; }
     if(curView!=="today"){ const t=document.querySelector('nav .tab[data-v="today"]'); if(t) t.click(); return true; }
     return false; }
+  // Android app: the native back gesture asks this first
+  window.__bujjetBack=()=>{ if(handleBack()){ exitArmed=false; return "handled"; }
+    if(exitArmed) return "exit"; exitArmed=true; toast("Swipe back again to close bujjet"); clearTimeout(rearmT); rearmT=setTimeout(()=>{exitArmed=false},2000); return "handled"; };
+  if(NATIVE) return;
   history.replaceState({bujjet:0},""); guard();
   window.addEventListener("popstate",()=>{
     if(handleBack()){ exitArmed=false; guard(); return; }

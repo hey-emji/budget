@@ -5,6 +5,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
 import org.json.JSONObject;
 
@@ -15,6 +16,17 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NotifReaderPlugin.class);
         super.onCreate(savedInstanceState);
+        // Back button / swipe back: let the app close its own panels first, and only leave after a second back.
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                try {
+                    getBridge().getWebView().evaluateJavascript(
+                        "(window.__bujjetBack ? window.__bujjetBack() : 'exit')",
+                        v -> { if (v == null || v.contains("exit")) finish(); });
+                } catch (Exception e) { finish(); }
+            }
+        });
         handleText(getIntent());
     }
 
