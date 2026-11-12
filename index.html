@@ -505,6 +505,8 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
+const GA=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
+  return reg?reg("GoogleAuth"):((C&&C.Plugins&&C.Plugins.GoogleAuth)||null); }catch(e){ return null; } })();
 
 const $=id=>document.getElementById(id);
 const peso=n=>(n<0?"−":"")+"₱"+Math.abs(n).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -1432,14 +1434,17 @@ const GOOGLE_CLIENT_ID="74104418090-c4aun8sh4o0jf2uo7gllc9ic8nj63pl3.apps.google
 const G_SCOPE="https://www.googleapis.com/auth/drive.appdata openid email profile", SYNC_FILE="bujjet-sync.json";
 let gTok=null, syncing=false, syncT=0;
 try{const t=JSON.parse(localStorage.getItem("bujjet.gtok")||"null"); if(t&&t.exp>Date.now()) gTok=t;}catch(e){}
-const gReady=()=>!!GOOGLE_CLIENT_ID&&!NATIVE; // Google blocks its sign-in page inside app web views; the Android app gets native sign-in later
+const gReady=()=>NATIVE?!!GA:!!GOOGLE_CLIENT_ID; // the Android app uses native Google sign-in (Google blocks its web sign-in inside app views)
 function syncMeta(){try{return JSON.parse(localStorage.getItem("bujjet.sync")||"null")}catch(e){return null}}
 function setSyncMeta(m){try{if(m)localStorage.setItem("bujjet.sync",JSON.stringify(m));else{localStorage.removeItem("bujjet.sync");localStorage.removeItem("bujjet.gtok")}}catch(e){}}
 const tokValid=()=>gTok&&gTok.exp>Date.now()+60000;
 function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
   const s=document.createElement("script");s.src="https://accounts.google.com/gsi/client";s.async=true;s.onload=()=>res();s.onerror=()=>rej(new Error("Couldn't reach Google. Check your connection."));document.head.appendChild(s)})}
-async function getToken(first){ if(tokValid()) return gTok.t;
+async function getToken(first,interactive){ if(tokValid()) return gTok.t;
   if(!gReady()) throw new Error("Google sign-in isn't available yet.");
+  if(GA){ let r; try{ r=await GA.token({interactive:!!(first||interactive)}); }
+    catch(e){ const m=String(e&&(e.message||e)); throw new Error(/signin/.test(m)?"signin":/cancel/.test(m)?"Sign-in cancelled":"Couldn't sign in to Google. Check your connection and try again."); }
+    gTok={t:r.token,exp:Date.now()+(Number(r.expiresIn)||3300)*1000}; try{localStorage.setItem("bujjet.gtok",JSON.stringify(gTok))}catch(e){} return gTok.t; }
   await loadGis(); const m=syncMeta();
   return new Promise((res,rej)=>{const c=google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:G_SCOPE,hint:(m&&m.email)||undefined,
     callback:r=>{ if(r.error) return rej(new Error("Couldn't sign in to Google"));
@@ -1464,7 +1469,8 @@ async function pushLocal(f){const id=await driveWrite(f&&f.id,{app:"bujjet",form
 function syncPillText(t,cls){const p=$("syncPill"); if(!p) return; p.className="pill "+(cls||"info"); p.textContent=t;}
 // opts.user: started by a tap (may open Google sign-in). Returns "pulled" | "pushed" | "same" | "skipped".
 async function syncNow(opts){opts=opts||{}; const m=syncMeta(); if(!m||!gReady()||syncing) return "skipped";
-  if(!tokValid()){ if(!opts.user){ syncPillText("Tap to sync","warn"); return "skipped"} await getToken(false); }
+  if(!tokValid()){ if(GA){ try{ await getToken(false,!!opts.user); }catch(e){ syncPillText("Tap to sync","warn"); if(opts.user) toast(e.message==="signin"?"Sign in to Google again to sync":e.message); return "skipped"; } }
+    else { if(!opts.user){ syncPillText("Tap to sync","warn"); return "skipped"} await getToken(false); } }
   syncing=true; syncPillText("Syncing…","info saving");
   try{ const f=await driveFind(), rs=f?((f.appProperties||{}).savedAt||""):"", base=m.syncedAt||"", local=(store&&store.config)?(store.savedAt||""):"";
     let did="same";
