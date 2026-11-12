@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -33,7 +33,9 @@
   --good:#5fcf8e; --good-soft:#15301f; --warn:#f0b04d; --warn-soft:#352711; --bad:#ff6b6b; --bad-soft:#3a1616; color-scheme:dark;}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{margin:0;height:100%}
+html,body{margin:0;height:100%;overflow-x:clip;max-width:100%}
+main{overflow-x:clip}
+.view{max-width:100%}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
 main{max-width:520px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom));display:grid;gap:14px}
 h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.02em}
