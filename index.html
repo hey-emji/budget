@@ -163,6 +163,15 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .busybox{background:var(--surface);color:var(--ink);border-radius:18px;padding:18px 22px;display:flex;align-items:center;gap:12px;font:600 15px var(--body)}
 .spin{width:20px;height:20px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.fixedbox{display:grid;gap:10px;margin-top:6px;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--bg)}
+.fxhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.fxhead>strong{font-size:20px}
+.fxrows{display:grid}
+.fxrow2{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:11px 0;border:none;border-top:1px solid var(--line);background:none;color:var(--ink);font:500 15px var(--body);text-align:left;cursor:pointer}
+.fxrow2 .chev{color:var(--muted);font-size:20px}
+.fxbar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--line)}
+.fxbar span{display:block;height:100%}
+.fxsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
+.fxsum i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -989,7 +998,18 @@ function renderSettings(force){
   const t=document.createElement("div");t.className="total-row";t.innerHTML=`<div class="t"><span>Total spending budget</span><span class="small muted">${unit}</span></div><strong>${peso2(tot*k)}</strong>`;f.appendChild(t);
   const fixed=document.createElement("div");fixed.className="small muted";
   const inst=instMonth(m)-creditMonth(m), bills=sum(config.bills,b=>b.amount), subs=sum(config.subs,x=>x.amount);
-  fixed.textContent=`Fixed ${unit}: cards & loans ${peso(inst*k)} · bills ${peso(bills*k)} · subscriptions ${peso(subs*k)}`;f.appendChild(fixed);
+  fixed.className="fixedbox"; const pay=config.incomePerPayday*(budView==="pp"?1:2), fx=(inst+bills+subs)*k, spend=tot*k, left=pay-fx-spend;
+  const pct=v=>Math.max(0,Math.min(100,v/Math.max(pay,1)*100)).toFixed(1);
+  fixed.innerHTML=`<div class="fxhead"><div><strong>Fixed costs</strong><div class="small muted">Set aside first, every payday</div></div><strong>${peso(fx)}</strong></div>
+    <div class="fxrows"></div>
+    <div class="fxbar" aria-hidden="true"><span style="width:${pct(fx)}%;background:var(--ink)"></span><span style="width:${pct(spend)}%;background:var(--accent)"></span><span style="width:${pct(Math.max(0,left))}%;background:var(--good,#3f9a62)"></span></div>
+    <div class="fxsum"><span><i style="background:var(--ink)"></i>Fixed ${peso(fx)}</span><span><i style="background:var(--accent)"></i>Spending ${peso(spend)}</span><span><i style="background:var(--good,#3f9a62)"></i>${left>=0?"Left over":"Short"} ${peso(Math.abs(left))}</span></div>
+    <div class="small muted">Out of ${peso(pay)} pay ${unit}.${left<0?" Your pay doesn't cover everything, so spending is trimmed from the bottom of the list up.":""}</div>`;
+  const rowsHost=fixed.querySelector(".fxrows");
+  [["Cards & loans",inst*k,"Installments & loans"],["Bills",bills*k,"Bills"],["Subscriptions",subs*k,"Subscriptions"]].forEach(([t,v,ed])=>{
+    const b=document.createElement("button"); b.type="button"; b.className="fxrow2"; b.innerHTML=`<span></span><strong></strong><span class="chev">›</span>`;
+    b.children[0].textContent=t; b.children[1].textContent=peso(v); b.onclick=()=>{ const fn=(window._mgOpen||{})[ed]; if(fn) fn(); }; rowsHost.appendChild(b); });
+  f.appendChild(fixed);
 }
 $("viewPP").onclick=()=>{budView="pp";setDirty=false;renderSettings(true)}; $("viewMo").onclick=()=>{budView="mo";setDirty=false;renderSettings(true)};
 $("setForm").onsubmit=async ev=>{ev.preventDefault();
@@ -1691,6 +1711,7 @@ function renderManage(){ if(NR) setTimeout(refreshAuto,0);
       openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>{const old=(config.subs||[]).find(o=>o.name===x.name.trim()&&o.card===x.card);return x.card?{name:x.name.trim(),amount:n2(x.amount),card:x.card,from:old&&old.from||mkey(new Date())}:{name:x.name.trim(),amount:n2(x.amount)}})}})})}],
   ];
   const grp={"Name":"mg-you","Google account":"mg-you","Pay":"mg-you","Detect transactions":"mg-you","Accounts & wallets":"mg-money","Credit cards":"mg-money","Installments & loans":"mg-money","Spending categories":"mg-budget","Bills":"mg-budget","Subscriptions":"mg-budget"};
+  window._mgOpen={}; rows.forEach(([t,,fn])=>{window._mgOpen[t]=fn});
   rows.forEach(([t,sub,fn])=>{const L=$(grp[t]||"mg-budget");const r=document.createElement("button");r.type="button";r.className="item mgrow";r.innerHTML='<span class="t"><strong></strong><span class="small muted"></span></span><span></span><span class="chev">›</span>';
     r.querySelector("strong").textContent=t;r.querySelector(".t .small").textContent=sub;r.onclick=fn;L.appendChild(r)});
 }
