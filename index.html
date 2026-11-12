@@ -475,7 +475,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   <div class="small muted" id="acctLabel">Paid with</div>
   <div class="chips" id="acctChips" role="group" aria-label="Account"></div>
   <div class="small muted" id="xferNote" hidden>Transfers move money between your pay, savings and cards. They never count as spending.</div>
-  <div class="small muted" id="incNote" hidden>Extra income goes to the account you pick. It doesn't change your spending budget. Your salary is added automatically from the Paydays tab.</div>
+  <div class="small muted" id="incNote" hidden>Pick <strong>Salary</strong> when your pay arrives: it records the actual amount for that payday and adds it to the account you pick. Other income goes to the account you pick and doesn't change your spending budget.</div>
   <div class="inline">
     <div><label class="small muted" for="note">Note</label><input id="note" placeholder="lunch, 1 pack…"></div>
     <div><label class="small muted" for="dt">Date</label><input id="dt" type="date" required></div>
@@ -632,7 +632,7 @@ function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate()
   const sy=start.getFullYear(),sm=start.getMonth(); let end;
   if(start.getDate()===15) end=payDate(sy,sm,2); else end=sm===11?payDate(sy+1,0,1):payDate(sy,sm+1,1);
   return {start,end};}
-const INC=[{id:"inc-side",name:"Side income"},{id:"inc-refund",name:"Refund"},{id:"inc-gift",name:"Gift"},{id:"inc-bonus",name:"Bonus / 13th month"},{id:"inc-other",name:"Other income"}];
+const INC=[{id:"inc-salary",name:"Salary"},{id:"inc-side",name:"Side income"},{id:"inc-refund",name:"Refund"},{id:"inc-gift",name:"Gift"},{id:"inc-bonus",name:"Bonus / 13th month"},{id:"inc-other",name:"Other income"}];
 const isInc=e=>String(e.cat).startsWith("inc-");
 const ACC=()=>(config&&config.accounts)||[];
 const CARDS=()=>(config&&config.cards)||[];
@@ -656,7 +656,7 @@ function balances(){
     const inn=sum(expenses.filter(e=>ok(e)&&((isInc(e)&&(e.acct||mainAcc().id)===a.id)||(e.ref===a.id&&(isXfer(e))))),e=>e.amount);
     const outA=sum(expenses.filter(e=>ok(e)&&!isInc(e)&&e.acct===a.id),e=>e.amount);
     let sal=0; if((config.salaryTo||mainAcc().id)===a.id){ let d=new Date(a.startDate+"T00:00"), y=d.getFullYear(), mo=d.getMonth();
-      const today=ymd(new Date()); for(let i=0;i<48;i++){ for(const h of [1,2]){const pd=payDate(y,mo,h), k=ymd(pd); if(k>a.startDate&&k<=today) sal+=paydays[k]?.income ?? config.incomePerPayday;} mo++; if(mo>11){mo=0;y++} if(ymd(new Date(y,mo,1))>today) break; } }
+      const today=ymd(new Date()); for(let i=0;i<48;i++){ for(const h of [1,2]){const pd=payDate(y,mo,h), k=ymd(pd); if(k>a.startDate&&(k<=today||(paydays[k]?.got&&paydays[k].got<=today))) sal+=paydays[k]?.income ?? config.incomePerPayday;} mo++; if(mo>11){mo=0;y++} if(ymd(new Date(y,mo,1))>today) break; } }
     out[a.id]={...a,bal:a.start+inn+sal-outA,inn:inn+sal,sal,outA};});
   (config.cards||[]).filter(c=>c.start!=null).forEach(c=>{const ok=e=>String(e.date)>=c.startDate;
     const buys=sum(expenses.filter(e=>ok(e)&&!isInc(e)&&e.cat!=="credit"&&e.cat!=="transfer"&&e.acct===c.id),e=>e.amount);
@@ -1093,6 +1093,17 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
     catch(e){expenses=before;render();toast("Couldn't save. Check your connection.");load()}
     btn.disabled=false; return;
   }
+  if(sheetMode==="inc"&&cat==="inc-salary"){ // salary = the actual pay for the nearest payday, not a separate entry (no double counting)
+    const d=new Date(vals.date+"T00:00"); let pd=null;
+    const near=[]; for(let mo=-1;mo<=1;mo++){const dt=new Date(d.getFullYear(),d.getMonth()+mo,1); near.push(payDate(dt.getFullYear(),dt.getMonth(),1),payDate(dt.getFullYear(),dt.getMonth(),2));}
+    const ahead=near.filter(x=>x>=d&&(x-d)<=7*864e5).sort((a,b)=>a-b)[0], behind=near.filter(x=>x<=d).sort((a,b)=>b-a)[0]; pd=ahead||behind;
+    const key=ymd(pd); closeSheet();
+    try{ await call("setPay",{date:key,income:vals.amount,got:vals.date});
+      if(vals.acct&&vals.acct!==(config.salaryTo||mainAcc().id)) await call("setConfig",{patch:{salaryTo:vals.acct}});
+      if(c&&c.kind==="inbox") await dropInbox(c.inboxId);
+      toast(`Salary for the ${dName(pd)} payday: ${peso2(vals.amount)}. Plan updated.`); }
+    catch(e){ toast("Couldn't save. Try again."); }
+    btn.disabled=false; return; }
   const exp={id:"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...vals,ts:new Date().toISOString()};
   const fromBox=c&&c.kind==="inbox"?INBOX().find(x=>x.id===c.inboxId):null; if(fromBox&&fromBox.ref) exp.srcRef=fromBox.ref;
   expenses=[...expenses,exp]; render(); closeSheet(); $("amt").value="";$("note").value="";
@@ -1125,7 +1136,7 @@ function compactHero(on){if(on===isCompact)return;isCompact=on;heroEl.classList.
 window.addEventListener("scroll",()=>{const y=window.scrollY; if(!isCompact&&y>110)compactHero(true); else if(isCompact&&y<30)compactHero(false)},{passive:true});
 $("dt").value=ymd(new Date());
 let ctx=null;
-function pickCat(id){selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>{const on=x.dataset.id===id;x.setAttribute("aria-pressed",on);if(on)requestAnimationFrame(()=>{const p=x.parentElement;if(p&&p.scrollWidth>p.clientWidth)p.scrollTo({left:Math.max(0,x.offsetLeft-p.clientWidth/2+x.offsetWidth/2),behavior:"smooth"})})})}
+function pickCat(id){if(id==="inc-salary"&&sheetMode==="inc"&&config&&config.salaryTo&&typeof pickAcct==="function"&&!(ctx&&ctx.kind==="edit"))setTimeout(()=>pickAcct(config.salaryTo),0);selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>{const on=x.dataset.id===id;x.setAttribute("aria-pressed",on);if(on)requestAnimationFrame(()=>{const p=x.parentElement;if(p&&p.scrollWidth>p.clientWidth)p.scrollTo({left:Math.max(0,x.offsetLeft-p.clientWidth/2+x.offsetWidth/2),behavior:"smooth"})})})}
 function buildQuick(){const q=$("quick");q.textContent="";
   const counts={};expenses.filter(e=>e.note&&!/estimated/i.test(e.note)&&e.cat!=="utilities"&&e.cat!=="credit"&&!isInc(e)).forEach(e=>{const k=e.cat+"|"+e.note.toLowerCase();const c=counts[k]||(counts[k]={note:e.note,cat:e.cat,n:0,amount:e.amount,ts:""});c.n++;if((e.date+e.ts)>c.ts){c.ts=e.date+e.ts;c.amount=e.amount}});
   const learned=Object.values(counts).filter(c=>c.n>=2).sort((a,b)=>b.n-a.n).slice(0,4);
@@ -1289,7 +1300,7 @@ function cleanWho(r){return r.who&&!/\*{2,}/.test(r.who)?r.who:(r.who||"")}
 function readingToPre(r,extra){ const cats=CATS().filter(c=>c.id!=="credit"), blob=[r.who,r.text].filter(Boolean).join(" ");
   const cardIds=CARDS().map(c=>c.id), byLast4=r.last4?CARDS().find(c=>c.last4===r.last4):null;
   let acct=(r.viaCard&&byLast4?byLast4.id:null)||(r.source?guessAcct(r.source,PAYW(),{cardIds,viaCard:r.viaCard}):null)||undefined;
-  let mode=r.type==="income"?"inc":"exp", cat=mode==="inc"?(/refund|reversal/i.test(blob)?"inc-refund":/salary|payroll|bonus|13th/i.test(blob)?"inc-bonus":"inc-other"):guessCat(blob,cats), to;
+  let mode=r.type==="income"?"inc":"exp", cat=mode==="inc"?(/refund|reversal/i.test(blob)?"inc-refund":/salary|payroll/i.test(blob)?"inc-salary":/bonus|13th/i.test(blob)?"inc-bonus":"inc-other"):guessCat(blob,cats), to;
   if(mode==="exp"){ const own=ownTarget(r.who,acct);
     if(!r.viaCard&&byLast4&&byLast4.id!==acct){mode="xfer";to="to-"+byLast4.id;}
     else if(!r.viaCard&&isSelf(r.who)&&/[*x]{4,}\d{4}/i.test(r.who||"")&&CARDS().length){mode="xfer";to="to-"+(CARDS().find(c=>c.id!==acct)||CARDS()[0]).id;}
@@ -1549,7 +1560,7 @@ async function call(action,data){
   if(!store) throw new Error("no_data");
   if(action==="add") store.expenses.push(data.expense);
   else if(action==="delete") store.expenses=store.expenses.filter(e=>e.id!==data.id);
-  else if(action==="setPay") store.paydays[data.date]={income:Number(data.income)||0,date:data.date};
+  else if(action==="setPay") store.paydays[data.date]={income:Number(data.income)||0,date:data.date,...(data.got?{got:data.got}:{})};
   else if(action==="setConfig") Object.assign(store.config,JSON.parse(JSON.stringify(data.patch||{})));
   else if(action==="setInbox") store.inbox=JSON.parse(JSON.stringify(data.inbox||[]));
   await persist(); apply(store);
