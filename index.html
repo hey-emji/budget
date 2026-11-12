@@ -925,7 +925,7 @@ function renderAccounts(){
     r.querySelector(".tags").innerHTML=tags.map(t=>`<span class="tag">${esc(t)}</span>`).join(""); r.querySelector(".ar strong").textContent=peso2(a.bal);
     r.querySelector(".editbtn").onclick=()=>editAccount(a); al.appendChild(r)});
   const cards=(config.cards||[]).filter(c=>c.start!=null).map(c=>B[c.id]);
-  cc.innerHTML=`<div class="list" id="ccList"></div><div class="small muted">Regular cards: balance when you started tracking + purchases you log − payments you log (tap Edit to match your card app). Installment cards: installments left to pay, minus any credit.</div>`;
+  cc.innerHTML=`<div class="list" id="ccList"></div><div class="small muted">Regular cards: balance when you started tracking + purchases you log − payments you log (tap Edit to match your card app). Installment cards: only subscriptions and purchases charged to them; their installments are under Loans & installments.</div>`;
   const cl=$("ccList");
   cards.forEach(c=>{const r=document.createElement("div");r.className="item accrow";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><div class="ar"><strong></strong><button class="editbtn" type="button">Edit</button></div>';
     r.querySelector("strong").textContent=c.name;
@@ -939,14 +939,15 @@ function renderAccounts(){
     const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,m)), oth=otherOwed(L); if(!ds.length&&oth<=0.009) return;
     const left=oth+sum(ds,d=>{const n=Math.min(d.total,d.current+Math.max(0,mDiff(config.startMonth,m)));return (d.total-n+1)*d.monthly})
       -sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
-    instTotal+=Math.max(0,left);
+    instTotal+=Math.max(0,oth); // installments themselves are counted under Loans & installments
     const mm=firstUnpaid(L,config.paidCards||{},config.credits||[]), due=Math.max(0,ds.length?monthDue(L,mm,config.credits||[]):0)+oth, dm=mAdd(mm,1), [dy,dmo]=dm.split("-").map(Number);
     const dd=new Date(dy,dmo-1,(ds[0]||{}).dueDay||1), cred=sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
     const r=document.createElement("div");r.className="item inst";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span><span class="tags"><span class="tag">Installments</span></span></div><strong></strong>';
     r.querySelector("strong").textContent=card?card.name:(/card$/i.test(L)?L:L+" card");
     const nd=nextCardDue(L), split=oth>0.009&&ds.length&&ymd(dd)>ymd(nd);
     r.querySelector(".t .small").textContent=split?`${peso(oth)} subscriptions and purchases due ${dName(nd)} · next installments ${peso(due-oth)} ${dName(dd)}`+(cred?` · ${peso(cred)} credit`:""):`Next ${peso(due)} due ${dName(dd)} · ${ds.length} installment${ds.length===1?"":"s"}`+(oth>0.009?` + ${peso(oth)} subscriptions and purchases`:"")+(cred?` · ${peso(cred)} credit`:"");
-    r.lastChild.textContent=peso2(Math.max(0,left)); cl.appendChild(r)});
+    r.querySelector(".t .small").textContent=(oth>0.009?`${peso(oth)} subscriptions and purchases due ${dName(nd)}. `:"No other charges. ")+`Its ${ds.length} installment${ds.length===1?"":"s"} (next ${peso(Math.max(0,due-oth))} due ${dName(dd)}) are under Loans & installments.`;
+    r.lastChild.textContent=peso2(Math.max(0,oth)); cl.appendChild(r)});
   const nCards=cards.length+cl.querySelectorAll(".item.inst").length;
   $("sumCC").textContent=`${nCards} card${nCards===1?"":"s"} · owed in total`; $("sumCCAmt").textContent=peso2(sum(cards,c=>c.owed)+instTotal);
 }
