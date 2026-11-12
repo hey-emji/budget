@@ -172,6 +172,15 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .fxbar span{display:block;height:100%}
 .fxsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
 .fxsum i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+#prioCard{display:grid;gap:12px}
+.prioTop{display:flex;align-items:baseline;gap:8px}.prioTop strong{font-size:28px;letter-spacing:-.02em}
+.prio{list-style:none;margin:0;padding:0;display:grid}
+.prow{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:12px 0;border-top:1px solid var(--line);cursor:pointer}
+.prow:first-child{border-top:none}.prow .chev{color:var(--muted);font-size:20px;align-self:center}
+.pn{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--body);background:var(--line);color:var(--ink)}
+.prow.good .pn{background:var(--good-soft);color:var(--good)}.prow.bad .pn{background:var(--bad-soft);color:var(--bad)}.prow.bad .pv{color:var(--bad)}
+.pr1{display:flex;justify-content:space-between;gap:10px}.pt{display:grid;gap:3px;min-width:0}.pl{color:var(--ink);opacity:.8}
+.disclaim{border-top:1px solid var(--line);padding-top:10px;margin:0}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -371,6 +380,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 
   <!-- SETTINGS -->
   <section class="view" id="v-settings" hidden>
+    <div class="card" id="prioCard"></div>
     <form class="card" id="setForm">
       <div class="row"><h2>Your budget</h2></div>
       <div class="seg" role="group" aria-label="Budget view"><button type="button" id="viewPP" aria-pressed="true">Per payday (15th / 30th)</button><button type="button" id="viewMo" aria-pressed="false">Monthly</button></div>
@@ -854,7 +864,7 @@ function renderPaydays(){
   <div class="row"><h2>Payday plan</h2><span class="pill ${p.final<0?"bad":p.cuts.length?"warn":"good"}">${p.final<0?peso(-p.final)+" short":peso(p.final)+" to save"}</span></div>
   <div class="row"><span>Pay ${p.actual?(p.date>new Date()?'<span class="small muted">(your estimate)</span>':"received"):'<span class="small muted">(expected)</span>'}</span><strong class="bigish">${peso2(p.income)}</strong></div>
   <form id="payForm" class="inline" style="align-items:end"><div><label class="small muted" for="payAmt">Actual or expected pay for ${dName(p.date)}</label><input id="payAmt" inputmode="decimal" placeholder="${p.income}"></div><button class="primary" type="submit">Update pay</button></form>
-  ${config.salaryTo&&config.salaryTo!==mainAcc().id?`<button class="secondary" type="button" id="movePay">Move pay from ${acctName(config.salaryTo)} to ${mainAcc().name}</button>`:""}
+
   <div class="row small muted"><span>Set aside so far</span><span>${peso(done)} of ${peso(total)}</span></div>
   <div class="bar"><span style="width:${total?Math.min(100,done/total*100).toFixed(1):0}%"></span></div>
   <div id="planGroups"></div>
@@ -984,6 +994,30 @@ function saveSpendFrom(from,spend,extra){
   const spendFrom=[...(config.spendFrom||[]).filter(x=>x.from<from),{from,spend}];
   return call("setConfig",{patch:{spendFrom,...(extra||{})}});
 }
+function renderPriorities(o){ const host=$("prioCard"); if(!host) return; const {k,unit,m}=o;
+  const pay=config.incomePerPayday*(budView==="pp"?1:2), B=o.bills*k, I=o.inst*k, S=o.subs*k, sp=o.spend, fx=B+I+S, left=pay-fx-sp;
+  const pct=v=>Math.max(0,Math.min(100,v/Math.max(pay,1)*100)).toFixed(1);
+  const names=(arr,f)=>{const n=arr.map(f).filter(Boolean);return n.length>4?n.slice(0,4).join(", ")+` and ${n.length-4} more`:n.join(", ")};
+  const debtNames=names(config.debts.filter(d=>debtActive(d,m)),d=>d.name);
+  const rows=[
+    ["1","Bills",B,"Keep the lights, water and internet on. These come first.",names(config.bills,b=>b.name),"Bills"],
+    ["2","Cards and loans",I,"Pay these on time to avoid late fees and interest piling up.",debtNames,"Installments & loans"],
+    ["3","Subscriptions",S,"Usually the easiest to pause or cancel when money is tight.",names(config.subs,x=>x.name),"Subscriptions"],
+    ["4","Spending",sp,"Food, transport and day-to-day. Set your amounts below.","","__form"],
+    ["5",left>=0?"Left over":"Short",Math.abs(left),left>=0?"What's free for savings, an emergency fund, or paying debts down faster.":"Your pay doesn't cover everything above. Spending gets trimmed from the bottom of your list up.","",null]];
+  host.innerHTML=`<div class="row"><h2>Where your pay goes</h2><span class="small muted">${unit}</span></div>
+    <div class="prioTop"><strong>${peso(pay)}</strong><span class="small muted">pay ${unit}</span></div>
+    <div class="fxbar" aria-hidden="true"><span style="width:${pct(B)}%;background:var(--ink)"></span><span style="width:${pct(I)}%;background:var(--ink);opacity:.7"></span><span style="width:${pct(S)}%;background:var(--ink);opacity:.45"></span><span style="width:${pct(sp)}%;background:var(--accent)"></span><span style="width:${pct(Math.max(0,left))}%;background:var(--good)"></span></div>
+    <div class="small muted">In the order bujjet sets money aside each payday.</div>
+    <ol class="prio"></ol>
+    <p class="small muted disclaim">Based only on what you entered and simple math. bujjet isn't a financial advisor. For advice on your situation, talk to a licensed professional.</p>`;
+  const ol=host.querySelector(".prio");
+  rows.forEach(([n,t,v,why,list,ed],i)=>{ const li=document.createElement("li"); li.className="prow"+(i===4?(left>=0?" good":" bad"):"");
+    li.innerHTML=`<span class="pn"></span><div class="pt"><div class="pr1"><strong></strong><strong class="pv"></strong></div><div class="small muted pw"></div>${list?'<div class="small pl"></div>':""}</div>${ed?'<span class="chev">›</span>':""}`;
+    li.querySelector(".pn").textContent=n; li.querySelector(".pr1 strong").textContent=t; li.querySelector(".pv").textContent=peso(v)+(i<4&&pay>0?" · "+Math.round(v/pay*100)+"%":"");
+    li.querySelector(".pw").textContent=why; if(list) li.querySelector(".pl").textContent=list;
+    if(ed){ li.tabIndex=0; li.setAttribute("role","button"); li.onclick=()=>{ if(ed==="__form"){ $("setForm").scrollIntoView({behavior:"smooth",block:"start"}); return; } const fn=(window._mgOpen||{})[ed]; if(fn) fn(); }; }
+    ol.appendChild(li); }); }
 function renderSettings(force){
   const f=$("setFields"); if(setDirty&&!force) return; if(f.dataset.built&&!force) return; f.dataset.built=1; f.textContent="";
   const k=budView==="pp"?0.5:1, unit=budView==="pp"?"per payday":"per month";
@@ -998,20 +1032,8 @@ function renderSettings(force){
   if(vicesCat()!=="__none") add("s-cig",`Vices ${unit}, part of Personal (₱)`,cigCap(m)*k,`For ${mName(m,true)}. It steps down each month as planned.`);
   const tot=sum(sp,x=>x.amount)+cigCap(m);
   const t=document.createElement("div");t.className="total-row";t.innerHTML=`<div class="t"><span>Total spending budget</span><span class="small muted">${unit}</span></div><strong>${peso2(tot*k)}</strong>`;f.appendChild(t);
-  const fixed=document.createElement("div");fixed.className="small muted";
   const inst=instMonth(m)-creditMonth(m), bills=sum(config.bills,b=>b.amount), subs=sum(config.subs,x=>x.amount);
-  fixed.className="fixedbox"; const pay=config.incomePerPayday*(budView==="pp"?1:2), fx=(inst+bills+subs)*k, spend=tot*k, left=pay-fx-spend;
-  const pct=v=>Math.max(0,Math.min(100,v/Math.max(pay,1)*100)).toFixed(1);
-  fixed.innerHTML=`<div class="fxhead"><div><strong>Fixed costs</strong><div class="small muted">Set aside first, every payday</div></div><strong>${peso(fx)}</strong></div>
-    <div class="fxrows"></div>
-    <div class="fxbar" aria-hidden="true"><span style="width:${pct(fx)}%;background:var(--ink)"></span><span style="width:${pct(spend)}%;background:var(--accent)"></span><span style="width:${pct(Math.max(0,left))}%;background:var(--good,#3f9a62)"></span></div>
-    <div class="fxsum"><span><i style="background:var(--ink)"></i>Fixed ${peso(fx)}</span><span><i style="background:var(--accent)"></i>Spending ${peso(spend)}</span><span><i style="background:var(--good,#3f9a62)"></i>${left>=0?"Left over":"Short"} ${peso(Math.abs(left))}</span></div>
-    <div class="small muted">Out of ${peso(pay)} pay ${unit}.${left<0?" Your pay doesn't cover everything, so spending is trimmed from the bottom of the list up.":""}</div>`;
-  const rowsHost=fixed.querySelector(".fxrows");
-  [["Cards & loans",inst*k,"Installments & loans"],["Bills",bills*k,"Bills"],["Subscriptions",subs*k,"Subscriptions"]].forEach(([t,v,ed])=>{
-    const b=document.createElement("button"); b.type="button"; b.className="fxrow2"; b.innerHTML=`<span></span><strong></strong><span class="chev">›</span>`;
-    b.children[0].textContent=t; b.children[1].textContent=peso(v); b.onclick=()=>{ const fn=(window._mgOpen||{})[ed]; if(fn) fn(); }; rowsHost.appendChild(b); });
-  f.appendChild(fixed);
+  renderPriorities({k,unit,inst,bills,subs,spend:tot*k,m});
 }
 $("viewPP").onclick=()=>{budView="pp";setDirty=false;renderSettings(true)}; $("viewMo").onclick=()=>{budView="mo";setDirty=false;renderSettings(true)};
 $("setForm").onsubmit=async ev=>{ev.preventDefault();
