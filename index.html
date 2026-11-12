@@ -181,6 +181,22 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .prow.good .pn{background:var(--good-soft);color:var(--good)}.prow.bad .pn{background:var(--bad-soft);color:var(--bad)}.prow.bad .pv{color:var(--bad)}
 .pr1{display:flex;justify-content:space-between;gap:10px}.pt{display:grid;gap:3px;min-width:0}.pl{color:var(--ink);opacity:.8}
 .disclaim{border-top:1px solid var(--line);padding-top:10px;margin:0}
+.accgrp{padding:0;overflow:hidden}
+.accgrp>summary{list-style:none;display:grid;grid-template-columns:auto 1fr auto auto;grid-template-areas:"ico title amt chev" "ico sub sub chev";gap:2px 12px;align-items:center;padding:16px;cursor:pointer}
+.accgrp .gt{display:contents}.accgrp .gt strong{grid-area:title}.accgrp .gt .small{grid-area:sub}.accgrp .gico{grid-area:ico}.accgrp .gamt{grid-area:amt}.accgrp .gchev{grid-area:chev}
+.accgrp>summary::-webkit-details-marker{display:none}
+.accgrp .gt strong{font-size:17px;min-width:0}
+.accgrp .gamt{font-size:17px;white-space:nowrap}
+.gico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.gico svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.gico.gsav{background:var(--good-soft);color:var(--good)}.gico.gln{background:var(--warn-soft);color:var(--warn)}
+.gchev{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;transition:transform .2s}
+.accgrp[open] .gchev{transform:rotate(90deg)}
+.gbody{display:grid;gap:12px;padding:0 16px 16px;border-top:1px solid var(--line);padding-top:12px}
+.accrow .ar{display:grid;justify-items:end;gap:6px}
+.editbtn{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:600 12px var(--body);cursor:pointer}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.subcard:empty{display:none}.subcard{border:1px solid var(--line);border-radius:16px;padding:12px;display:grid;gap:8px}
 .prefslink{display:block;width:100%;margin:22px 0 6px;padding:10px;background:none;border:none;color:var(--muted);font:500 14px var(--body);text-align:center;cursor:pointer}.prefslink span{color:var(--accent);font-weight:600}
 .backbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 22px var(--body);cursor:pointer}
 .updlg{max-height:80vh;overflow:auto;width:min(420px,calc(100% - 28px))}
@@ -366,15 +382,12 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   <!-- DEBTS -->
   <section class="view" id="v-debts" hidden>
     <div style="display:grid;gap:14px">
-      <div class="card" id="savingsCard"></div>
-      <div class="card" id="ccCard"></div>
-      <div class="card hero">
-        <span class="eyebrow muted">Installments left to pay</span>
-        <div class="big" id="debtTotal">—</div>
-        <div class="muted small" id="debtFree"></div>
-      </div>
-      <div class="card" id="cardCard"></div>
-      <div class="card"><h2>Installments</h2><div id="debtList"></div></div>
+      <details class="card accgrp" id="grpSav"><summary><span class="gico gsav"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 14h2"/></svg></span><span class="gt"><strong>Savings &amp; wallets</strong><span class="small muted" id="sumSav"></span></span><strong class="gamt" id="sumSavAmt"></strong><svg class="gchev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="gbody" id="savingsCard"></div></details>
+      <details class="card accgrp" id="grpCC"><summary><span class="gico gcc"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></span><span class="gt"><strong>Credit cards</strong><span class="small muted" id="sumCC"></span></span><strong class="gamt" id="sumCCAmt"></strong><svg class="gchev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="gbody" id="ccCard"></div></details>
+      <details class="card accgrp" id="grpLoans"><summary><span class="gico gln"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V10M10 16V10M14 16V10M18 16V10M3 8l9-5 9 5"/></svg></span><span class="gt"><strong>Loans &amp; installments</strong><span class="small muted" id="sumLoans"></span></span><strong class="gamt" id="debtTotal">—</strong><svg class="gchev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="gbody"><div class="muted small" id="debtFree"></div><div id="cardCard" class="subcard"></div><div id="debtList"></div></div></details>
     </div>
   </section>
 
@@ -901,29 +914,23 @@ function renderPaydays(){
 function renderAccounts(){
   const B=balances(), sc=$("savingsCard"), cc=$("ccCard");
   const accs=(config.accounts||[]).map(a=>B[a.id]);
-  sc.innerHTML=`<div class="row"><h2>Savings & wallet</h2><span class="pill good">${peso2(sum(accs,a=>a.bal))}</span></div><div class="list" id="accList"></div>
-   <div class="plangroup"><div class="row small"><strong>Show in "Money left to spend"</strong></div><div id="accToggles"></div></div>
-   <div class="row small"><span>Salary lands in</span><div class="seg" id="salSeg" style="min-width:200px"></div></div>
-   <div class="small muted">Your salary, income you log and transfers go in. Spending paid from these accounts, transfers out and card payments come out. Tap Adjust if a balance doesn't match your bank app.</div>`;
-  const tg=$("accToggles");
-  (config.accounts||[]).forEach(a=>{const on=a.spendable!==false;
-    const l=document.createElement("label");l.className="planitem";l.innerHTML='<input type="checkbox"><span class="t"><span></span></span><span></span>';
-    l.querySelector("input").checked=on; l.querySelector(".t span").textContent=a.name;
-    l.querySelector("input").onchange=async e=>{const accounts=config.accounts.map(x=>x.id===a.id?{...x,spendable:e.target.checked}:x);try{await call("setConfig",{patch:{accounts}});toast(e.target.checked?"Now counted in Money left to spend":"Hidden from Money left to spend")}catch(x){toast("Couldn't save. Try again.")}};
-    tg.appendChild(l)});
-  const ss=$("salSeg"); (config.accounts||[]).forEach(a=>{const b=document.createElement("button");b.type="button";b.textContent=a.name.replace(" savings","");b.setAttribute("aria-pressed",(config.salaryTo||mainAcc().id)===a.id);
-    b.onclick=async()=>{try{await call("setConfig",{patch:{salaryTo:a.id}});toast("Salary goes to "+a.name)}catch(x){toast("Couldn't save. Try again.")}};ss.appendChild(b)});
+  const salId=config.salaryTo||mainAcc().id, spendTot=sum(accs.filter(a=>(config.accounts.find(x=>x.id===a.id)||{}).spendable!==false),a=>a.bal);
+  $("sumSav").textContent=`${accs.length} account${accs.length===1?"":"s"} · ${peso(spendTot)} counted as money to spend`;
+  $("sumSavAmt").textContent=peso2(sum(accs,a=>a.bal));
+  sc.innerHTML=`<div class="list" id="accList"></div><div class="small muted">Tap Edit to update a balance, choose where your salary lands, or hide an account from Money left to spend.</div>`;
   const al=$("accList");
-  accs.forEach(a=>{const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Adjust</button><strong></strong>';
-    r.querySelector("strong").textContent=a.name; r.querySelector(".t .small").textContent=(a.note?a.note+" · ":"")+`+${peso(a.inn)} in${a.sal?` (incl. ${peso(a.sal)} salary)`:""} · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}`; r.lastChild.textContent=peso2(a.bal);
-    r.querySelector(".paybtn").onclick=()=>adjustAccount(a); al.appendChild(r)});
+  accs.forEach(a=>{const cfg=config.accounts.find(x=>x.id===a.id)||{}, tags=[a.id===salId?"Salary lands here":"",cfg.spendable===false?"Not in money to spend":""].filter(Boolean);
+    const r=document.createElement("div");r.className="item accrow";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span><span class="tags"></span></div><div class="ar"><strong></strong><button class="editbtn" type="button">Edit</button></div>';
+    r.querySelector(".t strong").textContent=a.name; r.querySelector(".t .small").textContent=`+${peso(a.inn)} in · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}`;
+    r.querySelector(".tags").innerHTML=tags.map(t=>`<span class="tag">${esc(t)}</span>`).join(""); r.querySelector(".ar strong").textContent=peso2(a.bal);
+    r.querySelector(".editbtn").onclick=()=>editAccount(a); al.appendChild(r)});
   const cards=(config.cards||[]).filter(c=>c.start!=null).map(c=>B[c.id]);
-  cc.innerHTML=`<div class="row"><h2>Credit cards</h2><span class="pill warn">${peso2(sum(cards,c=>c.owed))} owed</span></div><div class="list" id="ccList"></div><div class="small muted">Regular cards: balance when you started tracking + purchases you log − payments you log (tap Adjust to match your card app). Installment cards: installments left to pay, minus any credit.</div>`;
+  cc.innerHTML=`<div class="list" id="ccList"></div><div class="small muted">Regular cards: balance when you started tracking + purchases you log − payments you log (tap Edit to match your card app). Installment cards: installments left to pay, minus any credit.</div>`;
   const cl=$("ccList");
-  cards.forEach(c=>{const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><button class="paybtn" type="button">Adjust</button><strong></strong>';
+  cards.forEach(c=>{const r=document.createElement("div");r.className="item accrow";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><div class="ar"><strong></strong><button class="editbtn" type="button">Edit</button></div>';
     r.querySelector("strong").textContent=c.name;
     r.querySelector(".t .small").textContent=`Due the ${c.dueDay}${["","st","nd","rd"][c.dueDay]||"th"}`+(c.statement&&c.paidStmt!==c.statementDue?` · statement ${peso2(c.statement)} due ${dName(new Date(c.statementDue+"T00:00"))}`:"")+(c.buys?` · +${peso(c.buys)} new purchases`:"")+(c.paid?` · −${peso(c.paid)} paid`:"");
-    r.lastChild.textContent=peso2(c.owed); r.querySelector(".paybtn").onclick=()=>adjustAccount(c,true); cl.appendChild(r)});
+    r.querySelector(".ar strong").textContent=peso2(c.owed); r.querySelector(".editbtn").onclick=()=>adjustAccount(c,true); cl.appendChild(r)});
   // installment cards (Metrobank, Unionbank, etc.)
   const m=mkey(now); let instTotal=0;
   [...new Set(config.debts.map(d=>d.lender))].forEach(L=>{
@@ -935,13 +942,26 @@ function renderAccounts(){
     instTotal+=Math.max(0,left);
     const mm=firstUnpaid(L,config.paidCards||{},config.credits||[]), due=Math.max(0,ds.length?monthDue(L,mm,config.credits||[]):0)+oth, dm=mAdd(mm,1), [dy,dmo]=dm.split("-").map(Number);
     const dd=new Date(dy,dmo-1,(ds[0]||{}).dueDay||1), cred=sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
-    const r=document.createElement("div");r.className="item";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span></div><span class="pill info">Installments</span><strong></strong>';
+    const r=document.createElement("div");r.className="item inst";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span><span class="tags"><span class="tag">Installments</span></span></div><strong></strong>';
     r.querySelector("strong").textContent=card?card.name:(/card$/i.test(L)?L:L+" card");
     const nd=nextCardDue(L), split=oth>0.009&&ds.length&&ymd(dd)>ymd(nd);
     r.querySelector(".t .small").textContent=split?`${peso(oth)} subscriptions and purchases due ${dName(nd)} · next installments ${peso(due-oth)} ${dName(dd)}`+(cred?` · ${peso(cred)} credit`:""):`Next ${peso(due)} due ${dName(dd)} · ${ds.length} installment${ds.length===1?"":"s"}`+(oth>0.009?` + ${peso(oth)} subscriptions and purchases`:"")+(cred?` · ${peso(cred)} credit`:"");
     r.lastChild.textContent=peso2(Math.max(0,left)); cl.appendChild(r)});
-  cc.querySelector(".pill.warn").textContent=peso2(sum(cards,c=>c.owed)+instTotal)+" owed";
+  const nCards=cards.length+cl.querySelectorAll(".item.inst").length;
+  $("sumCC").textContent=`${nCards} card${nCards===1?"":"s"} · owed in total`; $("sumCCAmt").textContent=peso2(sum(cards,c=>c.owed)+instTotal);
 }
+function editAccount(a){ const cfg=config.accounts.find(x=>x.id===a.id)||{}, salId=config.salaryTo||mainAcc().id;
+  openManage(a.name,"",b=>{ b.innerHTML=`<div class="onbform">
+      <label><span class="small muted">Current balance (match your bank app)</span><input id="eaBal" inputmode="decimal"></label>
+      <label class="fxrow"><span><strong>Count in Money left to spend</strong><br><span class="small muted">Turn off for savings you don't want to touch.</span></span><input type="checkbox" id="eaSpend"></label>
+      <label class="fxrow"><span><strong>Salary lands here</strong><br><span class="small muted">Your pay is added to this account each payday.</span></span><input type="checkbox" id="eaSal"></label>
+      <div class="small muted">+${peso(a.inn)} in · −${peso(a.outA)} out since ${dName(new Date(a.startDate+"T00:00"))}. Changing the balance starts tracking from today.</div></div>`;
+    $("eaBal").value=Math.round(a.bal*100)/100; $("eaSpend").checked=cfg.spendable!==false; $("eaSal").checked=salId===a.id; },
+  async()=>{ const v=parseFloat(String($("eaBal").value).replace(/,/g,"")); if(!(v>=0)) throw new Error("Enter the balance");
+    const changed=Math.abs(v-a.bal)>0.004, today=ymd(new Date()), ts=new Date().toISOString();
+    const accounts=config.accounts.map(x=>x.id!==a.id?x:{...x,spendable:$("eaSpend").checked,...(changed?{start:v,startDate:today,startTs:ts}:{})});
+    const patch={accounts}; if($("eaSal").checked) patch.salaryTo=a.id; else if(salId===a.id){ const other=accounts.find(x=>x.id!==a.id&&x.id!=="cash"); if(other) patch.salaryTo=other.id; }
+    await call("setConfig",{patch}); toast("Saved"); }); }
 function adjustAccount(a,isCard){
   $("edTitle").textContent=(isCard?"What you owe on ":"Current balance of ")+a.name;
   $("edText").textContent=isCard?"Enter the current balance from your card app. New purchases and payments you log will be tracked from now.":"Enter the balance from your bank app. Income, transfers and payments you log will be tracked from now.";
@@ -954,7 +974,9 @@ function adjustAccount(a,isCard){
       else{const accounts=config.accounts.map(x=>x.id===a.id?{...x,start:v,startDate:today,startTs:ts}:x);await call("setConfig",{patch:{accounts}});}
       toast("Balance updated")}catch(e){toast("Couldn't save. Try again.")}};
 }
-function renderDebts(){
+function initGroups(){ document.querySelectorAll("details.accgrp").forEach(d=>{ if(d.dataset.init) return; d.dataset.init=1; try{ d.open=localStorage.getItem("bujjet.grp."+d.id)==="1"; }catch(e){}
+  d.addEventListener("toggle",()=>{ try{ localStorage.setItem("bujjet.grp."+d.id,d.open?"1":"0"); }catch(e){} }); }); }
+function renderDebts(){ initGroups();
   if(config.accounts||config.cards) renderAccounts();
   const m=mkey(now); let total=0, last=config.startMonth;
   const box=$("debtList"); box.textContent="";
@@ -974,7 +996,8 @@ function renderDebts(){
   const prepaid=sum((config.credits||[]).filter(c=>c.month>=m&&config.debts.some(d=>d.lender===c.lender)),c=>c.amount);
   total=Math.max(0,total-prepaid);
   $("debtTotal").textContent=peso2(total);
-  $("debtFree").textContent=`Installment-free after ${mName(last,true)} · ${peso2(instMonth(m))} due this month`;
+  $("debtFree").textContent=`Left to pay in total. Installment-free after ${mName(last,true)} · ${peso2(instMonth(m))} due this month.`;
+  const act=config.debts.filter(d=>m<=debtEnd(d)).length; $("sumLoans").textContent=`${act} active · ${peso(instMonth(m))} this month`;
   const c=config.card, cc=$("cardCard");
   cc.hidden=!c;
   if(c){const paidOff=c.paidOff||0, rem=Math.max(0,c.carryover-paidOff), pct=c.carryover?Math.min(1,paidOff/c.carryover):1;
