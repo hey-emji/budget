@@ -623,21 +623,23 @@ function plan(date){
 function upcomingPaydays(n){
   const out=[];let y=now.getFullYear(),mo=now.getMonth(),half=now.getDate()<=15?1:2;
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  while(out.length<n){const d=payDate(y,mo,half);if(d>=today)out.push(d);if(half===1)half=2;else{half=1;mo++;if(mo>11){mo=0;y++}}}
+  while(out.length<n){const d=payDate(y,mo,half);const g=paydays&&paydays[ymd(d)]&&paydays[ymd(d)].got;if(d>=today&&!(g&&g<=ymd(today)))out.push(d);if(half===1)half=2;else{half=1;mo++;if(mo>11){mo=0;y++}}}
   return out;
 }
 function spendFor(d){const k=typeof d==="string"?d:ymd(d);let sp=config.spend;[...(config.spendFrom||[])].sort((a,b)=>a.from<b.from?-1:1).forEach(x=>{if(x.from<=k)sp=x.spend});return sp}
 function budgetsFor(d){const m=mkey(d);
   return spendFor(d).map(s=>({id:s.id,name:s.name,amount:s.amount+(s.id===vicesCat()?cigCap(m):0)}));
 }
-function periodAt(off){let p=periodNow();for(let i=0;i<off;i++){const st=p.start,y=st.getFullYear(),mo=st.getMonth();
-  const ps=st.getDate()===15?(mo===0?payDate(y-1,11,2):payDate(y,mo-1,2)):payDate(y,mo,1);p={start:ps,end:st};}return p}
 let pOff=0;
+// Pay periods run payday to payday. If a pay was logged as received early (Income → Salary), its period starts that day.
+function nextNominal(ns){const y=ns.getFullYear(),m=ns.getMonth();return ns.getDate()===15?payDate(y,m,2):(m===11?payDate(y+1,0,1):payDate(y,m+1,1))}
+function prevNominal(ns){const y=ns.getFullYear(),m=ns.getMonth();return ns.getDate()===15?(m===0?payDate(y-1,11,2):payDate(y,m-1,2)):payDate(y,m,1)}
+function effStart(d){const g=paydays&&paydays[ymd(d)]&&paydays[ymd(d)].got;return g&&g<ymd(d)?new Date(g+"T00:00"):d}
 function periodNow(){const y=now.getFullYear(),mo=now.getMonth(),d=now.getDate(),ld=lastDay(y,mo);
-  let start; if(d>=Math.min(30,ld)) start=payDate(y,mo,2); else if(d>=15) start=payDate(y,mo,1); else {const py=mo===0?y-1:y,pm=mo===0?11:mo-1;start=payDate(py,pm,2)}
-  const sy=start.getFullYear(),sm=start.getMonth(); let end;
-  if(start.getDate()===15) end=payDate(sy,sm,2); else end=sm===11?payDate(sy+1,0,1):payDate(sy,sm+1,1);
-  return {start,end};}
+  let ns; if(d>=Math.min(30,ld)) ns=payDate(y,mo,2); else if(d>=15) ns=payDate(y,mo,1); else {const py=mo===0?y-1:y,pm=mo===0?11:mo-1;ns=payDate(py,pm,2)}
+  const today=ymd(now); let ne=nextNominal(ns); if(ymd(effStart(ne))<=today){ns=ne;ne=nextNominal(ns);}
+  return {start:effStart(ns),end:effStart(ne),ns};}
+function periodAt(off){let ns=periodNow().ns;for(let i=0;i<off;i++)ns=prevNominal(ns);return {start:effStart(ns),end:effStart(nextNominal(ns)),ns}}
 const INC=[{id:"inc-salary",name:"Salary"},{id:"inc-side",name:"Side income"},{id:"inc-refund",name:"Refund"},{id:"inc-gift",name:"Gift"},{id:"inc-bonus",name:"Bonus / 13th month"},{id:"inc-other",name:"Other income"}];
 const isInc=e=>String(e.cat).startsWith("inc-");
 const ACC=()=>(config&&config.accounts)||[];
@@ -688,8 +690,8 @@ function setMode(mode,keepCat,keepAcct){sheetMode=mode; const chips=$("catChips"
 }
 function renderMoneyIn(per,incMine){
   const box=$("moneyIn"); if(!box) return; box.textContent="";
-  const p=plan(per.start), extra=sum(incMine,e=>e.amount);
-  const rows=[{name:"Salary · "+dName(per.start),sub:p.actual?"Pay received":"Expected pay",amt:p.income}];
+  const p=plan(per.ns), extra=sum(incMine,e=>e.amount);
+  const rows=[{name:"Salary · "+dName(per.ns),sub:p.actual?(paydays[ymd(per.ns)]?.got&&paydays[ymd(per.ns)].got<ymd(per.ns)?"Received early, "+dName(new Date(paydays[ymd(per.ns)].got+"T00:00")):"Pay received"):"Expected pay",amt:p.income}];
   [...incMine].sort((a,b)=>(b.date+b.ts).localeCompare(a.date+a.ts)).forEach(e=>rows.push({e,name:e.note||(INC.find(c=>c.id===e.cat)||{}).name,sub:(INC.find(c=>c.id===e.cat)||{name:"Income"}).name+" · "+dName(new Date(e.date+"T00:00"))+" · to "+acctName(e.acct||mainAcc().id),amt:e.amount}));
   rows.forEach(r=>{const el=document.createElement("div");el.className="item";
     el.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong class="pos"></strong>'+(r.e?'<button class="del" type="button" aria-label="Delete income"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>':'<span></span>');
@@ -719,14 +721,14 @@ function render(){
   // month spend
   const allMine=expenses.filter(e=>String(e.date)>=pS&&String(e.date)<pE), mine=allMine.filter(e=>!isInc(e)&&!isXfer(e)&&!(e.cat==="credit"&&e.ref)), incMine=allMine.filter(isInc);
   renderMoneyIn(per,incMine);
-  const pp=plan(per.start); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
-  const budgets=budgetsFor(per.start).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
-  const cn=$("cutNote"); if(pp.cuts.length){cn.hidden=false;cn.textContent=`${[pp.income<config.incomePerPayday?`Pay on ${dName(per.start)} was ${peso(config.incomePerPayday-pp.income)} lower`:"",pp.cu.total?`${peso(pp.cu.total)} went to catch-up set-asides from ${dName(pp.cu.from)}`:""].filter(Boolean).join(" and ")}, so this period's budget was trimmed: `+pp.cuts.map(c=>`${c.name} −${peso(c.amount)}`).join(", ")+(pp.uncovered>0?`. Still short ${peso(pp.uncovered)}: cover it from cash on hand.`:".");} else cn.hidden=true;
+  const pp=plan(per.ns); const cutOf=id=>sum(pp.cuts.filter(c=>c.id===id),c=>c.amount);
+  const budgets=budgetsFor(per.ns).map(b=>({...b,amount:Math.max(0,b.amount/2-cutOf(b.id))}));
+  const cn=$("cutNote"); if(pp.cuts.length){cn.hidden=false;cn.textContent=`${[pp.income<config.incomePerPayday?`Pay on ${dName(per.ns)} was ${peso(config.incomePerPayday-pp.income)} lower`:"",pp.cu.total?`${peso(pp.cu.total)} went to catch-up set-asides from ${dName(pp.cu.from)}`:""].filter(Boolean).join(" and ")}, so this period's budget was trimmed: `+pp.cuts.map(c=>`${c.name} −${peso(c.amount)}`).join(", ")+(pp.uncovered>0?`. Still short ${peso(pp.uncovered)}: cover it from cash on hand.`:".");} else cn.hidden=true;
   let totB=0,totS=0; const box=$("cats"); box.textContent="";
   budgets.forEach(b=>{
     const spent=sum(mine.filter(e=>e.cat===b.id),e=>e.amount); totB+=b.amount; totS+=spent;
     const el=document.createElement("div"); el.className="cat";
-    if((spendFor(per.start).find(x=>x.id===b.id)||{}).amount===0){
+    if((spendFor(per.ns).find(x=>x.id===b.id)||{}).amount===0){
       el.innerHTML='<div class="row"><strong></strong><span class="pill info">No set budget</span></div><div class="row small muted"><span></span><span>logged as needed</span></div>';
       el.querySelector("strong").textContent=b.name; el.querySelector(".row.small span").textContent=peso(spent)+" spent";
       box.appendChild(el); return;
@@ -744,9 +746,9 @@ function render(){
   if(paid){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Bills and card payments (from set-asides)</span><strong></strong>';p.querySelector("strong").textContent=peso(paid);box.appendChild(p)}
   let left=totB-totS-other;
   window._ins={per,budgets,mine,totB,spentB:totS+other};
-  if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.start);
-    const cb=budgetsFor(cp.start).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
-    totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(cp.start).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
+  if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.ns);
+    const cb=budgetsFor(cp.ns).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
+    totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(cp.ns).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
   const spendAcc=(config.accounts||[]).filter(a=>a.spendable!==false);
   if(spendAcc.length){const B=balances(), money=sum(spendAcc,a=>B[a.id].bal);
     $("heroLabel").textContent="Money left to spend"; $("heroLeft").textContent=peso(money);
