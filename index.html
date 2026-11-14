@@ -801,6 +801,8 @@ function render(){
     if(b.paidMonth&&b.paidMonth>=mkey(date)) date=new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
     ups.push({date,make:()=>mkRow(b.name,"Due "+dName(date)+" · Bill",b.amount,()=>openSheet({kind:"bill",amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(date)}))});
   });
+  autoSubList().forEach(x=>{ const t=new Date(), m0=mkey(t); let d=subChargeDate(x,m0); if(ymd(d)<ymd(t)) d=subChargeDate(x,mAdd(m0,1));
+    ups.push({date:d,make:()=>mkRow(x.name,`Auto-charged to ${acctName(x.card)} on ${dName(d)}. bujjet logs it that day.`,x.amount,null,"Auto")}); });
   ups.sort((x,y)=>x.date-y.date);
   const thisMonth=ups.filter(u=>u.date.getFullYear()===now.getFullYear()&&u.date.getMonth()===now.getMonth());
   let show=thisMonth.slice(0,3); if(show.length===3){const last=show[2].date.getTime(); show=thisMonth.filter((u,i)=>i<3||u.date.getTime()===last);}
@@ -1354,7 +1356,8 @@ const INBOX=()=>(store&&store.inbox)||[];
 async function addToInbox(items){ if(!store||!store.config||!items.length) return 0; const cur=INBOX();
   const same=(a,b)=>(a.ref&&b.ref&&a.ref===b.ref)||(a.amount===b.amount&&a.date===b.date&&a.type===b.type&&tok(a.who).join(" ")===tok(b.who).join(" "));
   const uniq=[]; items.forEach(it=>{ const u=uniq.find(u=>same(u,it)); if(!u){uniq.push({...it});return} ["source","who","date","ref"].forEach(k=>{if(!u[k]&&it[k])u[k]=it[k]}); });
-  const fresh=uniq.filter(it=>!cur.some(c=>same(c,it))
+  const kept=[]; for(const it of uniq){ if(!(await matchAutoSub(it))) kept.push(it); }
+  const fresh=kept.filter(it=>!cur.some(c=>same(c,it))
     &&!(it.ref&&expenses.some(e=>e.srcRef===it.ref)));
   if(!fresh.length) return 0; await call("setInbox",{inbox:[...cur,...fresh.map(it=>({id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...it,at:new Date().toISOString()}))]}); return fresh.length; }
 async function dropInbox(id){ await call("setInbox",{inbox:INBOX().filter(x=>x.id!==id)}); }
@@ -1372,6 +1375,29 @@ function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INB
     ok.onclick=()=>{ const p=readingToPre(it,{kind:"inbox",inboxId:it.id}); openSheet(p); $("quick").hidden=true; $("readNote").hidden=false; $("readNote").textContent="From what you shared"+(it.source?" ("+it.source+")":"")+". Check it, then save."; };
     no.onclick=async()=>{ await dropInbox(it.id); toast("Dismissed"); };
     host.appendChild(d); }); }
+/* ---------- subscriptions charged automatically to an account or card ---------- */
+const isLenderCard=id=>(config.cards||[]).some(c=>c.id===id&&c.lender);
+const subSlug=x=>String(x.name||"").toLowerCase().replace(/[^a-z0-9]+/g,"-");
+const subWord=x=>tok(x.name)[0]||"";
+function autoSubList(){ return (config&&config.subs||[]).filter(x=>x.card&&x.day&&!isLenderCard(x.card)&&(PAYW().some(a=>a.id===x.card))); }
+function subChargeDate(x,m){ const [y,mo]=m.split("-").map(Number); return new Date(y,mo-1,Math.min(x.day,lastDay(y,mo-1))); }
+let autoBusy=false;
+async function runAutoSubs(){ if(autoBusy||!config) return; autoBusy=true;
+  try{ const today=ymd(new Date()), skip=new Set(config.autoSkip||[]), add=[];
+    for(const x of autoSubList()){ let m=x.from||mkey(new Date()); const end=mkey(new Date());
+      for(let i=0;i<24&&m<=end;i++,m=mAdd(m,1)){ const d=ymd(subChargeDate(x,m)), key=subSlug(x)+"|"+m;
+        if(d>today||(x.fromDate&&d<x.fromDate)||skip.has(key)||expenses.some(e=>e.autoSub===key)) continue;
+        const w=subWord(x), near=expenses.find(e=>!e.autoSub&&Math.abs(new Date(e.date)-new Date(d))<=4*864e5&&w&&tok(e.note).includes(w)); if(near) continue; // you already logged it
+        add.push({id:"as"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:d,cat:"utilities",amount:x.amount,note:x.name,acct:x.card,autoSub:key,ts:new Date().toISOString()}); } }
+    for(const e of add) await call("add",{expense:e});
+    if(add.length) toast(add.length===1?`${add[0].note} was auto-charged: logged ${peso2(add[0].amount)}`:`${add.length} auto-charged subscriptions logged`);
+  }catch(e){} finally{ autoBusy=false; } }
+// A detected bank message for an auto-charged subscription updates that entry (actual amount) instead of adding a duplicate.
+async function matchAutoSub(it){ if(it.type!=="expense") return false; const words=tok((it.who||"")+" "+(it.text||""));
+  const x=autoSubList().find(s=>subWord(s)&&words.includes(subWord(s))); if(!x) return false;
+  const d=it.date||ymd(new Date()); const e=expenses.find(e=>e.autoSub&&e.autoSub.startsWith(subSlug(x)+"|")&&Math.abs(new Date(e.date)-new Date(d))<=4*864e5);
+  if(!e) return false; if(Math.abs(e.amount-it.amount)>0.004){ const upd={...e,amount:it.amount,date:it.date||e.date}; await call("delete",{id:e.id,keepAuto:true}); await call("add",{expense:upd}); toast(`${x.name}: updated to ${peso2(it.amount)} from your bank`); }
+  return true; }
 /* ---------- automatic detection (Android app) ---------- */
 let clipRead=null;
 const hashStr=t=>{let h=0;for(let i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))|0;return String(h)};
@@ -1592,7 +1618,7 @@ function disconnectGoogle(){ try{ if(gTok&&window.google&&google.accounts&&googl
 async function call(action,data){
   if(!store) throw new Error("no_data");
   if(action==="add") store.expenses.push(data.expense);
-  else if(action==="delete") store.expenses=store.expenses.filter(e=>e.id!==data.id);
+  else if(action==="delete"){ const gone=store.expenses.find(e=>e.id===data.id); if(gone&&gone.autoSub&&!data.keepAuto){ store.config.autoSkip=[...(store.config.autoSkip||[]),gone.autoSub].slice(-200); } store.expenses=store.expenses.filter(e=>e.id!==data.id); }
   else if(action==="setPay") store.paydays[data.date]={income:Number(data.income)||0,date:data.date,...(data.got?{got:data.got}:{})};
   else if(action==="setConfig") Object.assign(store.config,JSON.parse(JSON.stringify(data.patch||{})));
   else if(action==="setInbox") store.inbox=JSON.parse(JSON.stringify(data.inbox||[]));
@@ -1643,7 +1669,7 @@ const F={
   debts:[{k:"name",label:"Item",type:"text",ph:"e.g. Phone"},{k:"monthly",label:"Monthly (₱)",type:"num",ph:"0",half:true},{k:"lender",label:"Card / lender",type:"text",ph:"e.g. BPI card",half:true},
     {k:"current",label:"Payment # this month",type:"num",ph:"e.g. 3",half:true},{k:"total",label:"Total payments",type:"num",ph:"e.g. 12",half:true},{k:"dueDay",label:"Due day",type:"num",ph:"e.g. 5",half:true}],
   cards:[{k:"name",label:"Credit card",type:"text",ph:"e.g. Maya Credit Card"},{k:"balance",label:"Balance owed now (₱)",type:"num",ph:"0",half:true},{k:"dueDay",label:"Due day",type:"num",ph:"e.g. 16",half:true}],
-  subs:[{k:"name",label:"Subscription",type:"text",ph:"e.g. Netflix"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0",half:true},{k:"card",label:"Charged to",type:"select",half:true,opts:()=>[{v:"",t:"Paid directly"},...(config&&config.cards||[]).filter(c=>c.lender).map(c=>({v:c.id,t:c.short||c.name}))]}]
+  subs:[{k:"name",label:"Subscription",type:"text",ph:"e.g. Netflix"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0",half:true},{k:"day",label:"Charge day",type:"num",ph:"e.g. 13",half:true},{k:"card",label:"Paid from",type:"select",opts:()=>[{v:"",t:"I pay it myself"},...(config&&config.accounts||[]).map(a=>({v:a.id,t:a.name+" (auto-debit)"})),...(config&&config.cards||[]).map(c=>({v:c.id,t:(c.short||c.name)+" (card)"}))]}]
 };
 const DEFAULT_SPEND=[{name:"Food & Groceries",amount:6000},{name:"Household",amount:1000},{name:"Transportation",amount:1500},{name:"Personal",amount:1000},{name:"Dining Out",amount:1500}];
 const KNOWN_IDS={"food & groceries":"groceries","dining out":"foodout","transportation":"transport","household":"household","personal":"personal"};
@@ -1806,7 +1832,8 @@ function renderManage(){ if(NR) setTimeout(refreshAuto,0);
       openManage("Credit cards","Balance owed now. Changing it resets tracking for that card from today.",b=>listEditor(b,d,F.cards,"Add credit card",{name:"",balance:"",dueDay:""}),
       async()=>{await call("setConfig",{patch:{cards:buildCards(d,config.debts,CARDS().map(c=>({...c,_owed:B[c.id]?.owed})))}})})}],
     ["Subscriptions",config.subs.map(x=>x.name).join(", ")||"None",()=>{const d=config.subs.map(x=>({...x}));
-      openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>{const old=(config.subs||[]).find(o=>o.name===x.name.trim()&&o.card===x.card);return x.card?{name:x.name.trim(),amount:n2(x.amount),card:x.card,from:old&&old.from||mkey(new Date())}:{name:x.name.trim(),amount:n2(x.amount)}})}})})}],
+      openManage("Subscriptions","",b=>listEditor(b,d,F.subs,"Add subscription",{name:"",amount:""}),async()=>{await call("setConfig",{patch:{subs:d.filter(x=>String(x.name||"").trim()).map(x=>{const old=(config.subs||[]).find(o=>o.name===x.name.trim()&&o.card===x.card);const day=Math.max(0,Math.min(31,Math.round(n2(x.day)||0)));
+        return x.card?{name:x.name.trim(),amount:n2(x.amount),card:x.card,...(day?{day}:{}),from:old&&old.from||mkey(new Date()),fromDate:old&&old.fromDate||ymd(new Date())}:{name:x.name.trim(),amount:n2(x.amount),...(day?{day}:{})}})}});runAutoSubs()})}],
   ];
   const grp={"Name":"mg-you","Google account":"mg-you","Pay":"mg-you","Detect transactions":"mg-you","Accounts & wallets":"mg-money","Credit cards":"mg-money","Installments & loans":"mg-money","Spending categories":"mg-budget","Bills":"mg-budget","Subscriptions":"mg-budget"};
   window._mgOpen={}; rows.forEach(([t,,fn])=>{window._mgOpen[t]=fn});
@@ -1883,6 +1910,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 $("syncPill").onclick=()=>{if(syncMeta())syncNow({user:true})};
 setTimeout(()=>{if(syncMeta()&&store&&store.config)syncNow({})},1500);
 setTimeout(()=>{processShared().catch(()=>{})},900);
+setTimeout(()=>{runAutoSubs()},700); document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") setTimeout(runAutoSubs,400); });
 /* ---------- back button / swipe back: close what's open first, warn before leaving ---------- */
 (function(){
   const vis=id=>{const e=$(id);return e&&!e.hidden};
