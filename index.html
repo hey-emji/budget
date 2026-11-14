@@ -120,7 +120,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
-#todayHero{cursor:pointer}#heroLabel::after{content:"  ›";opacity:.7}
+#todayHero{cursor:pointer}.linkbtn{background:none;border:0;padding:4px 0 0;margin:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:0}.subchips{margin-top:6px}.chip.sub{font-size:.85em;padding:5px 10px}#heroLabel::after{content:"  ›";opacity:.7}
 .insheet{max-height:90vh;overflow-y:auto;overscroll-behavior:contain}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.45;justify-self:center;margin:2px 0;box-shadow:0 0 0 14px transparent}
 .insum{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}.insum .r{text-align:right}
@@ -478,6 +478,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
   <label class="amount" for="amt"><span>₱</span><input id="amt" inputmode="decimal" placeholder="0" required></label>
   <div class="small muted" id="catLabel">Category</div>
   <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+  <div class="chips subchips" id="subChips" role="group" aria-label="Subcategory (optional)" hidden></div>
   <div class="small muted" id="acctLabel">Paid with</div>
   <div class="chips" id="acctChips" role="group" aria-label="Account"></div>
   <div class="small muted" id="xferNote" hidden>Transfers move money between your pay, savings and cards. They never count as spending.</div>
@@ -698,7 +699,7 @@ function renderMoneyIn(per,incMine){
   rows.forEach(r=>{const el=document.createElement("div");el.className="item";
     el.innerHTML='<div class="t"><span></span><span class="small muted"></span></div><strong class="pos"></strong>'+(r.e?'<button class="del" type="button" aria-label="Delete income"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>':'<span></span>');
     el.querySelector(".t span").textContent=r.name; el.querySelector(".t .small").textContent=r.sub; el.querySelector("strong").textContent="+"+peso2(r.amt);
-    if(r.e){const tt=el.querySelector(".t");tt.classList.add("tap");tt.onclick=()=>openSheet({kind:"edit",entry:r.e,amount:r.e.amount,cat:r.e.cat,note:r.e.note,date:r.e.date,acct:r.e.acct});
+    if(r.e){const tt=el.querySelector(".t");tt.classList.add("tap");tt.onclick=()=>openSheet({kind:"edit",entry:r.e,amount:r.e.amount,cat:r.e.cat,note:r.e.note,date:r.e.date,acct:r.e.acct,sub:r.e.sub});
       el.querySelector(".del").onclick=async()=>{if(!await confirmBox(`Delete +${peso2(r.e.amount)}${r.e.note?" · "+r.e.note:""}?`,"This removes it from your income."))return;try{await call("delete",{id:r.e.id});toast("Deleted")}catch(x){toast("Couldn't delete. Try again.")}};}
     box.appendChild(el)});
   const t=$("incTotal"); t.querySelector("strong").textContent="+"+peso2(p.income+extra);
@@ -706,7 +707,17 @@ function renderMoneyIn(per,incMine){
   const mk=mkey(now), monthExtra=sum(expenses.filter(e=>isInc(e)&&String(e.date).startsWith(mk)),e=>e.amount), allExtra=sum(expenses.filter(isInc),e=>e.amount);
   $("savedNote").textContent=`Extra income: ${peso2(monthExtra)} this month · ${peso2(allExtra)} since you started tracking`;
 }
-const CATS=()=>[...budgetsFor(now).map(b=>({id:b.id,name:b.name})),{id:"utilities",name:"Bills & Utilities"},{id:"credit",name:"Credit Card & Loans"},{id:"other",name:"Other"}];
+const CATS=()=>[...budgetsFor(now).map(b=>({id:b.id,name:b.name})),{id:"utilities",name:"Bills & Utilities"},{id:"fees",name:"Fees & Charges"},{id:"credit",name:"Credit Card & Loans"},{id:"other",name:"Other"}];
+// Optional subcategories (shown after picking a category). Budgets stay per category.
+const SUBCATS={groceries:["Groceries & palengke","Rice","Drinking water","Snacks"],foodout:["Restaurants","Fast food","Coffee & milk tea","Food delivery"],
+  transport:["Commute","Grab, taxi, Angkas","Fuel","Parking & toll","Car upkeep"],household:["Toiletries & cleaning","Laundry","LPG","Home supplies & repairs"],
+  personal:["Clothes & shoes","Haircut & grooming","Vices"],health:["Medicine","Check-ups & dental","Vitamins"],family:["Padala & allowance","Gifts","Donations & church","Celebrations"],
+  fun:["Movies & events","Trips","Hobbies","Games & top-ups"],shopping:["Online shopping","Gadgets","Big purchases"],learning:["Courses","Books","Work tools"],
+  utilities:["Electricity","Water","Internet","Phone & load","Rent / HOA"],fees:["Bank fees","Interest","Late fees"]};
+const NEW_CATS=[{id:"health",name:"Health"},{id:"family",name:"Family & Giving"},{id:"fun",name:"Fun & Leisure"},{id:"shopping",name:"Shopping"},{id:"learning",name:"Learning & Work"}];
+// One-time: add the newer categories at ₱0 so existing budgets and history don't change.
+function ensureCategories(c){ if(!c||c.catsV>=2) return false; const add=list=>{ if(!Array.isArray(list)) return; NEW_CATS.forEach(n=>{ if(!list.some(x=>x.id===n.id||String(x.name).toLowerCase()===n.name.toLowerCase())) list.push({id:n.id,name:n.name,amount:0}); }); };
+  add(c.spend); (c.spendFrom||[]).forEach(v=>add(v.spend)); c.catsV=2; return true; }
 
 /* ---------- render ---------- */
 function render(){
@@ -730,7 +741,7 @@ function render(){
   budgets.forEach(b=>{
     const spent=sum(mine.filter(e=>e.cat===b.id),e=>e.amount); totB+=b.amount; totS+=spent;
     const el=document.createElement("div"); el.className="cat";
-    if((spendFor(per.ns).find(x=>x.id===b.id)||{}).amount===0){
+    if((spendFor(per.ns).find(x=>x.id===b.id)||{}).amount===0){ if(!spent) return;
       el.innerHTML='<div class="row"><strong></strong><span class="pill info">No set budget</span></div><div class="row small muted"><span></span><span>logged as needed</span></div>';
       el.querySelector("strong").textContent=b.name; el.querySelector(".row.small span").textContent=peso(spent)+" spent";
       box.appendChild(el); return;
@@ -746,24 +757,13 @@ function render(){
   if(other){const p=document.createElement("div");p.className="row small";p.innerHTML='<span>Other (not budgeted)</span><strong></strong>';p.querySelector("strong").textContent=peso(other);box.appendChild(p)}
   const paid=sum(mine.filter(e=>e.cat==="utilities"||e.cat==="credit"),e=>e.amount);
   if(paid){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Bills and card payments (from set-asides)</span><strong></strong>';p.querySelector("strong").textContent=peso(paid);box.appendChild(p)}
+  const fees=sum(mine.filter(e=>e.cat==="fees"),e=>e.amount);
+  if(fees){const p=document.createElement("div");p.className="row small muted";p.innerHTML='<span>Fees &amp; charges (not in budgets)</span><strong></strong>';p.querySelector("strong").textContent=peso(fees);box.appendChild(p)}
   let left=totB-totS-other;
   window._ins={per,budgets,mine,totB,spentB:totS+other};
   if(pOff!==0){const cp=periodAt(0),a=ymd(cp.start),z=ymd(cp.end),cm=expenses.filter(e=>String(e.date)>=a&&String(e.date)<z),cpp=plan(cp.ns);
     const cb=budgetsFor(cp.ns).map(b=>Math.max(0,b.amount/2-sum(cpp.cuts.filter(c=>c.id===b.id),c=>c.amount)));
     totB=sum(cb,x=>x);totS=sum(cm.filter(e=>budgetsFor(cp.ns).some(b=>b.id===e.cat)),e=>e.amount);const co=sum(cm.filter(e=>e.cat==="other"),e=>e.amount);left=totB-totS-co;other=co;}
-  const spendAcc=(config.accounts||[]).filter(a=>a.spendable!==false);
-  if(spendAcc.length){const B=balances(), money=sum(spendAcc,a=>B[a.id].bal);
-    $("heroLabel").textContent="Money left to spend"; $("heroLeft").textContent=peso(money);
-    $("heroLeft").dataset.budget=left; window._budgetLeft=left; window._money=money; window._spendNames=spendAcc.map(a=>a.name).join(" + ");}
-  else { $("heroLabel").textContent="Left until payday"; $("heroLeft").textContent=peso(left); window._money=null; }
-  const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
-  $("heroSub").textContent=window._money!=null
-    ?`In ${window._spendNames} · Planned budget left ${peso(left)} · about ${peso(Math.max(0,Math.min(left,window._money))/daysLeft)} a day for ${daysLeft} days`
-    :`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
-  const pr=$("planRow"); if(pr){ if(pOff===0){ pr.hidden=false; $("planLeft").textContent=peso(left);
-    const base="This period's budgets minus what you've logged.";
-    $("planNote").textContent=window._money==null?base:window._money<left-0.5?`${base} You have ${peso(left-window._money)} less in ${window._spendNames} than planned, so ${peso(window._money)} is your real limit.`:`${base} Money left to spend at the top is what's actually in ${window._spendNames}.`;
-  } else pr.hidden=true; }
   const next=upcomingPaydays(1)[0], dd=Math.round((next-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
   $("heroPayday").textContent=dd===0?"Payday today":`Payday ${dName(next)} · ${dd}d`;
 
@@ -781,29 +781,48 @@ function render(){
     const [dy,dmo]=dm.split("-").map(Number), date=new Date(dy,dmo-1,(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1);
     const nd=nextCardDue(L), cname=/card$/i.test(L)?L:L+" card";
     if(oth>0.009&&ds.length&&ymd(date)>ymd(nd)){
-      ups.push({date:nd,make:()=>mkRow(cname,"Due "+dName(nd)+" · subscriptions and purchases (installments already paid)",oth,
+      ups.push({date:nd,amt:oth,from:mainAcc().id,make:()=>mkRow(cname,"Due "+dName(nd)+" · subscriptions and purchases (installments already paid)",oth,
         ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+lenderCard(L),acct:mainAcc().id,amount:oth,note:L+" card payment",lender:L}))});
       const inst=Math.max(0,sum(ds,d=>d.monthly)-credit);
-      if(inst>0.009) ups.push({date,make:()=>mkRow(cname,"Due "+dName(date)+" · "+ds.map(d=>d.name).join(", ")+(credit?` · ${peso(credit)} credit applied`:""),inst,
+      if(inst>0.009) ups.push({date,amt:inst,from:mainAcc().id,make:()=>mkRow(cname,"Due "+dName(date)+" · "+ds.map(d=>d.name).join(", ")+(credit?` · ${peso(credit)} credit applied`:""),inst,
         ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+lenderCard(L),acct:mainAcc().id,amount:Math.round(inst*100)/100,note:L+" card payment",lender:L,month:dm}))});
       return;
     }
-    ups.push({date,make:()=>mkRow(/card$/i.test(L)?L:L+" card","Due "+dName(date)+" · "+[...ds.map(d=>d.name),...(oth>0.009?[peso(oth)+" subscriptions and purchases"]:[])].join(", ")+(credit?` · ${peso(credit)} credit applied`:""),amt,
+    ups.push({date,amt,from:mainAcc().id,make:()=>mkRow(/card$/i.test(L)?L:L+" card","Due "+dName(date)+" · "+[...ds.map(d=>d.name),...(oth>0.009?[peso(oth)+" subscriptions and purchases"]:[])].join(", ")+(credit?` · ${peso(credit)} credit applied`:""),amt,
       ()=>openSheet({kind:"card",mode:"xfer",to:"to-"+lenderCard(L),acct:mainAcc().id,amount:Math.round(amt*100)/100,note:L+" card payment",lender:L,month:dm}))});
   });
   (config.cards||[]).filter(c=>c.statement&&c.statementDue&&c.paidStmt!==c.statementDue).forEach(c=>{
     const date=new Date(c.statementDue+"T00:00");
-    ups.push({date,make:()=>mkRow(c.name,"Due "+dName(date)+" · statement · min "+peso(c.minDue||0),c.statement,
+    ups.push({date,amt:c.statement,from:mainAcc().id,make:()=>mkRow(c.name,"Due "+dName(date)+" · statement · min "+peso(c.minDue||0),c.statement,
       ()=>openSheet({kind:"stmt",mode:"xfer",to:"to-"+c.id,acct:mainAcc().id,amount:c.statement,note:c.name+" payment",card:c.id}))});
   });
   (config.bills||[]).forEach((b,bi)=>{ if(!b.dueDay) return;
     let date=new Date(now.getFullYear(),now.getMonth(),b.dueDay);
     if(b.paidMonth&&b.paidMonth>=mkey(date)) date=new Date(now.getFullYear(),now.getMonth()+1,b.dueDay);
-    ups.push({date,make:()=>mkRow(b.name,"Due "+dName(date)+" · Bill",b.amount,()=>openSheet({kind:"bill",amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(date)}))});
+    const bf=b.card||mainAcc().id, viaCard=(config.cards||[]).some(c=>c.id===bf);
+    ups.push({date,amt:Number(b.amount)||0,from:bf,make:()=>mkRow(b.name,"Due "+dName(date)+" · Bill"+(b.card?" · from "+(viaCard?acctNameCard(bf):acctName(bf)):""),b.amount,()=>openSheet({kind:"bill",amount:b.amount,cat:"utilities",note:b.name,bill:bi,month:mkey(date),acct:viaCard?undefined:bf}))});
   });
-  autoSubList().forEach(x=>{ const t=new Date(), m0=mkey(t); let d=subChargeDate(x,m0); if(ymd(d)<ymd(t)) d=subChargeDate(x,mAdd(m0,1));
-    ups.push({date:d,make:()=>mkRow(x.name,`Auto-charged to ${acctName(x.card)} on ${dName(d)}. bujjet logs it that day.`,x.amount,null,"Auto")}); });
+  autoSubList().forEach(x=>{ const t=new Date(), m0=mkey(t); let d=subChargeDate(x,m0); const k0=subSlug(x)+"|"+m0;
+    if(ymd(d)<ymd(t)||expenses.some(e=>e.autoSub===k0)||(config.autoSkip||[]).includes(k0)) d=subChargeDate(x,mAdd(m0,1));
+    ups.push({date:d,amt:Number(x.amount)||0,from:x.card,auto:true,make:()=>mkRow(x.name,`Auto-charged to ${acctName(x.card)} on ${dName(d)}. bujjet logs it that day.`,x.amount,null,"Auto")}); });
   ups.sort((x,y)=>x.date-y.date);
+  const spendAcc=(config.accounts||[]).filter(a=>a.spendable!==false);
+  const resv=reservedItems(ups,spendAcc,next), reserved=sum(resv,u=>u.amt); window._reserved=reserved; window._resv=resv;
+  if(spendAcc.length){const B=balances(), have=sum(spendAcc,a=>B[a.id].bal), money=have-reserved;
+    $("heroLabel").textContent="Money left to spend"; $("heroLeft").textContent=peso(money);
+    $("heroLeft").dataset.budget=left; window._budgetLeft=left; window._money=money; window._have=have; window._spendNames=spendAcc.map(a=>a.name).join(" + ");}
+  else { $("heroLabel").textContent="Left until payday"; $("heroLeft").textContent=peso(left); window._money=null; }
+  const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
+  const hs=$("heroSub"); hs.textContent=window._money!=null
+    ?`${peso(window._have)} in ${window._spendNames}`+(reserved>0.009?"":` · Planned budget left ${peso(left)}`)+` · about ${peso(Math.max(0,Math.min(left,window._money))/daysLeft)} a day for ${daysLeft} days`
+    :`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
+  if(window._money!=null&&reserved>0.009){ const b=document.createElement("button"); b.type="button"; b.className="linkbtn"; b.id="heroResv";
+    b.textContent=`${peso(reserved)} set aside for ${resv.length} payment${resv.length===1?"":"s"} before payday ›`;
+    b.onclick=ev=>{ev.stopPropagation(); openReserved();}; hs.append(document.createElement("br"),b); }
+  const pr=$("planRow"); if(pr){ if(pOff===0){ pr.hidden=false; $("planLeft").textContent=peso(left);
+    const base="This period's budgets minus what you've logged.";
+    $("planNote").textContent=window._money==null?base:window._money<left-0.5?`${base} You have ${peso(left-window._money)} less in ${window._spendNames} than planned (after set-asides), so ${peso(window._money)} is your real limit.`:`${base} Money left to spend at the top is what's actually in ${window._spendNames}.`;
+  } else pr.hidden=true; }
   const thisMonth=ups.filter(u=>u.date.getFullYear()===now.getFullYear()&&u.date.getMonth()===now.getMonth());
   let show=thisMonth.slice(0,3); if(show.length===3){const last=show[2].date.getTime(); show=thisMonth.filter((u,i)=>i<3||u.date.getTime()===last);}
   if(!show.length){const e=document.createElement("div");e.className="small muted";e.style.padding="6px 0";e.textContent="Nothing due this month.";due.appendChild(e);}
@@ -832,7 +851,7 @@ function render(){
     r.querySelector(".t .small").textContent=(e.cat==="credit"&&e.ref?"Card payment → "+acctNameCard(e.ref):catName(e.cat))+" · "+dName(new Date(e.date+"T00:00"))+(e.acct&&e.acct!=="cash"?" · "+acctName(e.acct):"");
     r.querySelector("strong").textContent=peso2(e.amount);
     const tt=r.querySelector(".t"); tt.classList.add("tap"); tt.setAttribute("role","button"); tt.tabIndex=0;
-    tt.onclick=()=>openSheet({kind:"edit",entry:e,amount:e.amount,cat:e.cat,note:e.note,date:e.date,acct:e.acct,ref:e.ref});
+    tt.onclick=()=>openSheet({kind:"edit",entry:e,amount:e.amount,cat:e.cat,note:e.note,date:e.date,acct:e.acct,ref:e.ref,sub:e.sub});
     r.querySelector("button").onclick=async()=>{
       const ok=await confirmBox(`Delete ${peso2(e.amount)}${e.note?" · "+e.note:""}?`,"This removes it from your budget.");
       if(!ok) return;
@@ -1095,6 +1114,7 @@ $("addForm").onsubmit=async ev=>{ev.preventDefault();
   if(sheetMode==="xfer"){const to=selCat.slice(3); if(to===selAcct){toast("Pick a different account to move to");btn.disabled=false;return}
     if(isAcc(to)||to==="cash"){cat="transfer";ref=to}else{cat="credit";ref=to}}
   const vals={date:$("dt").value,cat,amount:Math.round(v*100)/100,note:$("note").value.trim().slice(0,80)||(sheetMode==="xfer"?(cat==="credit"?acctNameCard(ref)+" payment":"To "+acctName(ref)):""),acct:selAcct,ref};
+  if(sheetMode==="exp"&&selSub&&(SUBCATS[cat]||[]).includes(selSub)) vals.sub=selSub; else if(c&&c.kind==="edit") vals.sub=undefined;
   if(c&&c.kind==="edit"){
     const upd={...c.entry,...vals}; const before=expenses;
     expenses=expenses.map(x=>x.id===upd.id?upd:x); render(); closeSheet();
@@ -1148,7 +1168,11 @@ function compactHero(on){if(on===isCompact)return;isCompact=on;heroEl.classList.
 window.addEventListener("scroll",()=>{const y=window.scrollY; if(!isCompact&&y>110)compactHero(true); else if(isCompact&&y<30)compactHero(false)},{passive:true});
 $("dt").value=ymd(new Date());
 let ctx=null;
-function pickCat(id){if(id==="inc-salary"&&sheetMode==="inc"&&config&&config.salaryTo&&typeof pickAcct==="function"&&!(ctx&&ctx.kind==="edit"))setTimeout(()=>pickAcct(config.salaryTo),0);selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>{const on=x.dataset.id===id;x.setAttribute("aria-pressed",on);if(on)requestAnimationFrame(()=>{const p=x.parentElement;if(p&&p.scrollWidth>p.clientWidth)p.scrollTo({left:Math.max(0,x.offsetLeft-p.clientWidth/2+x.offsetWidth/2),behavior:"smooth"})})})}
+let selSub=null;
+function renderSubs(id){ const box=$("subChips"); if(!box) return; box.textContent=""; selSub=null; const list=sheetMode==="exp"?(SUBCATS[id]||[]):[]; box.hidden=!list.length;
+  list.forEach(n=>{ const b=document.createElement("button"); b.type="button"; b.className="chip sub"; b.textContent=n; b.dataset.id=n; b.onclick=()=>pickSub(selSub===n?null:n); box.appendChild(b); }); }
+function pickSub(n){ selSub=n; document.querySelectorAll("#subChips .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.id===n)); }
+function pickCat(id){renderSubs(id);if(id==="inc-salary"&&sheetMode==="inc"&&config&&config.salaryTo&&typeof pickAcct==="function"&&!(ctx&&ctx.kind==="edit"))setTimeout(()=>pickAcct(config.salaryTo),0);selCat=id;document.querySelectorAll("#catChips .chip").forEach(x=>{const on=x.dataset.id===id;x.setAttribute("aria-pressed",on);if(on)requestAnimationFrame(()=>{const p=x.parentElement;if(p&&p.scrollWidth>p.clientWidth)p.scrollTo({left:Math.max(0,x.offsetLeft-p.clientWidth/2+x.offsetWidth/2),behavior:"smooth"})})})}
 function buildQuick(){const q=$("quick");q.textContent="";
   const counts={};expenses.filter(e=>e.note&&!/estimated/i.test(e.note)&&e.cat!=="utilities"&&e.cat!=="credit"&&!isInc(e)).forEach(e=>{const k=e.cat+"|"+e.note.toLowerCase();const c=counts[k]||(counts[k]={note:e.note,cat:e.cat,n:0,amount:e.amount,ts:""});c.n++;if((e.date+e.ts)>c.ts){c.ts=e.date+e.ts;c.amount=e.amount}});
   const learned=Object.values(counts).filter(c=>c.n>=2).sort((a,b)=>b.n-a.n).slice(0,4);
@@ -1163,15 +1187,22 @@ function openSheet(pre){ctx=pre||null;$("dt").value=pre&&pre.date?pre.date:ymd(n
   $("quick").hidden=!!pre; if(!pre) buildQuick(); $("readNote").hidden=true; $("sheetTools").hidden=!!pre&&pre.kind==="edit";
   const pm=pre&&pre.mode?pre.mode:pre&&pre.cat&&String(pre.cat).startsWith("inc-")?"inc":pre&&(pre.cat==="transfer"||(pre.cat==="credit"&&pre.ref))?"xfer":"exp";
   setMode(pm,pm==="xfer"?(pre.ref?"to-"+pre.ref:pre.to):pre&&pre.cat,pre&&pre.acct);
-  if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";}$("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
-function closeUpcoming(){$("upDlg").hidden=true;$("upBack").hidden=true}
+  if(pre){$("amt").value=pre.amount||"";$("note").value=pre.note||"";} if(pre&&pre.sub) pickSub(pre.sub); $("backdrop").hidden=false;$("addForm").hidden=false;setTimeout(()=>$("amt").focus(),60)}
+// Payments due before the next payday that will come out of money you can spend (not credit cards, not savings).
+function reservedItems(ups,spendAcc,next){ const ids=new Set(spendAcc.map(a=>a.id)), lim=ymd(next);
+  return ups.filter(u=>u.amt>0.009&&u.from&&ids.has(u.from)&&ymd(u.date)<lim); }
+function openReserved(){ const l=$("upAll"); l.textContent=""; const r=window._resv||[];
+  const n=document.createElement("div"); n.className="small muted"; n.style.margin="0 0 8px";
+  n.textContent=`Due before your next payday and paid from ${window._spendNames}. bujjet keeps this out of Money left to spend until you pay it. Card-paid items aren't here; they're in the card's bill.`; l.appendChild(n);
+  r.forEach(u=>l.appendChild(u.make())); $("upTitle").textContent="Set aside before payday"; $("upBack").hidden=false; $("upDlg").hidden=false; }
+function closeUpcoming(){$("upTitle").textContent="All upcoming payments";$("upDlg").hidden=true;$("upBack").hidden=true}
 function askCloseSheet(){ if(($("amt").value||"").trim()&&!(ctx&&ctx.kind==="edit")) confirmBox("Discard this entry?","You haven't saved it yet.",{yes:"Discard",no:"Keep editing"}).then(ok=>{if(ok)closeSheet()}); else closeSheet(); }
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
 $("fab").onclick=()=>openSheet();
 /* ---------- spending breakdown sheet ---------- */
-const CAT_COLORS=[[/food|grocer|meal/i,"#3f9a62"],[/dining|eat|resto/i,"#e3a127"],[/transpo|grab|commut|gas|fuel/i,"#3f7fc7"],[/house|home/i,"#2aa3a0"],[/personal|vice|cig/i,"#9a62c6"],[/health|med/i,"#d65a8a"],[/fun|leisure|entertain/i,"#c97b2e"]];
+const CAT_COLORS=[[/food|grocer|meal/i,"#3f9a62"],[/dining|eat|resto/i,"#e3a127"],[/transpo|grab|commut|gas|fuel/i,"#3f7fc7"],[/house|home/i,"#2aa3a0"],[/personal|vice|cig/i,"#9a62c6"],[/health|med/i,"#d65a8a"],[/fun|leisure|entertain/i,"#c97b2e"],[/family|giving|gift/i,"#e07a5f"],[/shop/i,"#5d6fbf"],[/learn|work|study/i,"#8a9a3b"]];
 const EXTRA_COLORS=["#8a9a3b","#b0587a","#5d6fbf","#a07a4f"];
-function catColor(id,name,i){ if(id==="utilities"||id==="credit") return "#7d8590"; if(id==="other") return "#a8916b";
+function catColor(id,name,i){ if(id==="utilities"||id==="credit"||id==="fees") return "#7d8590"; if(id==="other") return "#a8916b";
   const hit=CAT_COLORS.find(([re])=>re.test(name||"")); return hit?hit[1]:EXTRA_COLORS[i%EXTRA_COLORS.length]; }
 let insSel=null, insZ=1; const INS_Z=[7,"period",30,60,90];
 function insCats(){ const I=window._ins; const used=new Set();
@@ -1179,7 +1210,7 @@ function insCats(){ const I=window._ins; const used=new Set();
   list.push({id:"other",name:"Other",color:catColor("other"),plan:0});
   list.push({id:"bills",name:"Bills & payments",color:catColor("utilities"),plan:0});
   return list; }
-const insKey=e=>e.cat==="utilities"||e.cat==="credit"?"bills":e.cat;
+const insKey=e=>e.cat==="utilities"||e.cat==="credit"||e.cat==="fees"?"bills":e.cat;
 function openIns(){ if(!window._ins) return; insSel=null; renderIns(); $("insBack").hidden=false; $("insSheet").hidden=false; $("insSheet").scrollTop=0; }
 function closeIns(){ $("insBack").hidden=true; $("insSheet").hidden=true; }
 function renderIns(){
@@ -1230,8 +1261,10 @@ function renderIns(){
     const r=c.plan>0?`<span class="${over?"over":""}">${peso(sp)} / ${peso(c.plan)}</span>`:`<span>${peso(sp)} <span class="small muted">no plan</span></span>`;
     return `<div class="icat"><div class="row"><span><span class="insdot" style="background:${c.color}"></span>${esc(c.name)}</span>${r}</div>`+
       (c.plan>0?`<div class="ibar"><span style="width:${(c.plan/mx*100).toFixed(1)}%;background:var(--line)"></span></div>`:"")+
-      `<div class="ibar" style="background:transparent"><span style="width:${(sp/mx*100).toFixed(1)}%;background:${over?"var(--bad)":c.color}"></span></div></div>`}).join("");
+      `<div class="ibar" style="background:transparent"><span style="width:${(sp/mx*100).toFixed(1)}%;background:${over?"var(--bad)":c.color}"></span></div>`+subSplit(ents.filter(e=>e.k===c.id))+`</div>`}).join("");
 }
+function subSplit(es){ const m={}; es.forEach(e=>{ if(e.sub) m[e.sub]=(m[e.sub]||0)+e.amount; }); const ks=Object.keys(m); if(!ks.length) return "";
+  const rest=sum(es.filter(e=>!e.sub),e=>e.amount); return `<div class="small muted isub">`+ks.sort((a,b)=>m[b]-m[a]).map(k=>`${esc(k)} ${peso(m[k])}`).concat(rest>0.009?[`Unsorted ${peso(rest)}`]:[]).join(" · ")+`</div>`; }
 /*PARSER-START*/
 /* ---------- message + receipt reading (all on this phone) ---------- */
 const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank|\bmcc\b/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank|maricard/i],["SeaBank",/sea ?bank/i],
@@ -1252,13 +1285,19 @@ const CAT_HINTS=[
   ["food",/puregold|super ?market|hypermarket|savemore|save more|easymart|alfamart|7[- ]?eleven|ministop|lawson|family ?mart|waltermart|s ?& ?r\b|landers|grocer|palengke|dali\b|merkado|metro (super|mart)|shopwise|rustan'?s|market|grabmart|pandamart/i],
   ["dining",/jollibee|mcdo|mcdonald|kfc|chowking|greenwich|mang inasal|starbucks|coffee|caf[eé]|restaurant|resto|grab ?food|foodpanda|shakey|pizza|burger|milk ?tea|bakery|bakeshop|red ribbon|goldilocks|max'?s|army navy|potato corner|dunkin|krispy|tim hortons|bo'?s|cbtl|samgyup|ramen|food ?court/i],
   ["transport",/\bgrab\b(?!\s*(food|mart|pay))|grab ?car|angkas|joyride|move ?it|\blrt\b|\bmrt\b|beep|petron|\bshell\b|caltex|seaoil|cleanfuel|phoenix|parking|toll|easytrip|autosweep|taxi|bus\b|p2p/i],
+  ["health",/mercury ?drug|southstar|rose ?pharmacy|generika|the generics|pharmacy|botika|drugstore|clinic|hospital|medical|dental|diagnostic|hi-?precision|laborator|optical|maxicare|intellicare/i],
   ["household",/hardware|wilcon|handyman|ace home|true ?value|ikea|our home|mr\.? ?diy|daiso|japan home|home ?depot|landmark|sm home|cleaning|laundry/i],
-  ["personal",/watsons|mercury ?drug|southstar|rose ?pharmacy|generika|the generics|pharmacy|salon|barber|uniqlo|h&m|penshoppe|bench|cigar|marlboro|vape|clinic|dental|optical/i],
+  ["personal",/watsons|salon|barber|uniqlo|h&m|penshoppe|bench|cigar|marlboro|vape/i],
+  ["shopping",/shopee|lazada|zalora|temu|shein|tiktok ?shop|abenson|anson'?s|silicon valley|power ?mac|beyond the box|digital walker|octagon|sm appliance|automatic centre|anytime fitness/i],
+  ["fun",/cinema|movie|sm ?tickets|ticketnet|klook|agoda|booking\.com|airbnb|cebu ?pacific|air ?asia|philippine airlines|\bpal\b|steam|playstation|nintendo|codashop|razer gold|mobile legends|timezone|tom'?s world/i],
+  ["learning",/udemy|coursera|skillshare|national book ?store|fully booked|booksale|tuition|seminar|webinar/i],
+  ["fees",/annual fee|late (payment )?fee|late charge|finance charge/i],
   ["bills",/meralco|maynilad|manila ?water|pldt|converge|globe ?(at ?home|postpaid)?|smart ?(postpaid|bro)?|\bdito\b|sky ?(cable|fiber)|cignal|bayad|electric|water district|association dues|hoa|insurance|philhealth|sss|pag-?ibig/i],
   ["subs",/netflix|spotify|youtube|apple\.com|icloud|google ?(one|play)|hbo|home box office|disney|viu|prime video|claude|openai|chatgpt|canva|hostinger|namecheap|godaddy|adobe|microsoft/i]];
 const CAT_NAME_RE={food:/food|grocer/i,dining:/dining|eat|resto/i,transport:/transpo/i,household:/house|home/i,personal:/personal/i};
 function guessCat(t,cats){ for(const [k,re] of CAT_HINTS){ if(!re.test(t)) continue;
     if(k==="bills"||k==="subs"){ const u=cats.find(c=>c.id==="utilities"); if(u) return u.id; continue; }
+    const byId={health:"health",shopping:"shopping",fun:"fun",learning:"learning",fees:"fees"}[k]; if(byId){ if(cats.some(c=>c.id===byId)) return byId; continue; }
     const c=cats.find(c=>CAT_NAME_RE[k]&&CAT_NAME_RE[k].test(c.name)); if(c) return c.id; }
   return "other"; }
 function guessAcct(t,accts,opts){ opts=opts||{}; const src=PH_SOURCES.find(([,re])=>re.test(t)); if(!src) return null;
@@ -1628,7 +1667,7 @@ async function load(){
   store=await idbGet("state");
   if(!store||!store.config){ $("skel").hidden=true; startOnboarding(); return; }
   store.expenses=store.expenses||[]; store.paydays=store.paydays||{};
-  let ch=ensureCash(store.config); (store.config.cards||[]).forEach(c=>{if(c.lender&&!c.otherFrom){c.otherFrom=ymd(new Date());ch=true}}); if(ch) await persist();
+  let ch=ensureCash(store.config); if(ensureCategories(store.config)) ch=true; (store.config.cards||[]).forEach(c=>{if(c.lender&&!c.otherFrom){c.otherFrom=ymd(new Date());ch=true}}); if(ch) await persist();
   apply(store);
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 }
@@ -1665,14 +1704,14 @@ function listEditor(host,items,fields,addLabel,blank){
 const F={
   accounts:[{k:"name",label:"Name",type:"text",ph:"e.g. GCash, BPI"},{k:"balance",label:"Balance now (₱)",type:"num",ph:"0",half:true},{k:"spendable",label:"Spending money",type:"check",half:true}],
   spend:[{k:"name",label:"Category",type:"text",ph:"e.g. Food & Groceries"},{k:"amount",label:"Budget per month (₱)",type:"num",ph:"0"}],
-  bills:[{k:"name",label:"Bill",type:"text",ph:"e.g. Electricity"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0",half:true},{k:"dueDay",label:"Due day (1–31)",type:"num",ph:"optional",half:true}],
+  bills:[{k:"name",label:"Bill",type:"text",ph:"e.g. Electricity"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0",half:true},{k:"dueDay",label:"Due day (1–31)",type:"num",ph:"optional",half:true},{k:"card",label:"Paid from",type:"select",opts:()=>[{v:"",t:"Main account"+(config&&mainAcc&&config.accounts&&config.accounts.length?" ("+mainAcc().name+")":"")},...(config&&config.accounts||[]).map(a=>({v:a.id,t:a.name})),...(config&&config.cards||[]).map(c=>({v:c.id,t:(c.short||c.name)+" (card)"}))]}],
   debts:[{k:"name",label:"Item",type:"text",ph:"e.g. Phone"},{k:"monthly",label:"Monthly (₱)",type:"num",ph:"0",half:true},{k:"lender",label:"Card / lender",type:"text",ph:"e.g. BPI card",half:true},
     {k:"current",label:"Payment # this month",type:"num",ph:"e.g. 3",half:true},{k:"total",label:"Total payments",type:"num",ph:"e.g. 12",half:true},{k:"dueDay",label:"Due day",type:"num",ph:"e.g. 5",half:true}],
   cards:[{k:"name",label:"Credit card",type:"text",ph:"e.g. Maya Credit Card"},{k:"balance",label:"Balance owed now (₱)",type:"num",ph:"0",half:true},{k:"dueDay",label:"Due day",type:"num",ph:"e.g. 16",half:true}],
   subs:[{k:"name",label:"Subscription",type:"text",ph:"e.g. Netflix"},{k:"amount",label:"Per month (₱)",type:"num",ph:"0",half:true},{k:"day",label:"Charge day",type:"num",ph:"e.g. 13",half:true},{k:"card",label:"Paid from",type:"select",opts:()=>[{v:"",t:"I pay it myself"},...(config&&config.accounts||[]).map(a=>({v:a.id,t:a.name+" (auto-debit)"})),...(config&&config.cards||[]).map(c=>({v:c.id,t:(c.short||c.name)+" (card)"}))]}]
 };
-const DEFAULT_SPEND=[{name:"Food & Groceries",amount:6000},{name:"Household",amount:1000},{name:"Transportation",amount:1500},{name:"Personal",amount:1000},{name:"Dining Out",amount:1500}];
-const KNOWN_IDS={"food & groceries":"groceries","dining out":"foodout","transportation":"transport","household":"household","personal":"personal"};
+const DEFAULT_SPEND=[{name:"Food & Groceries",amount:6000},{name:"Household",amount:1000},{name:"Transportation",amount:1500},{name:"Personal",amount:1000},{name:"Dining Out",amount:1500},{name:"Health",amount:0},{name:"Family & Giving",amount:0},{name:"Fun & Leisure",amount:0},{name:"Shopping",amount:0},{name:"Learning & Work",amount:0}];
+const KNOWN_IDS={"food & groceries":"groceries","dining out":"foodout","transportation":"transport","household":"household","personal":"personal","health":"health","family & giving":"family","fun & leisure":"fun","shopping":"shopping","learning & work":"learning"};
 const n2=v=>Math.max(0,Math.round((Number(v)||0)*100)/100);
 const day=v=>{const d=Math.round(Number(v)||0);return d>=1&&d<=31?d:null};
 
@@ -1683,7 +1722,7 @@ function buildAccounts(list,prev){const today=ymd(new Date()), ts=new Date().toI
     if(old&&Math.abs((old._bal??old.start)-n2(a.balance))<0.005){return {...old,name:out.name,spendable:out.spendable}}
     return {...(old||{}),...out,start:n2(a.balance),startDate:today,startTs:ts};});}
 function buildSpend(list){const used=new Set();return list.filter(x=>String(x.name||"").trim()).map(x=>{let id=x.id||KNOWN_IDS[x.name.trim().toLowerCase()]||("c-"+slug(x.name));while(used.has(id))id+="2";used.add(id);return {id,name:x.name.trim(),amount:n2(x.amount)}})}
-function buildBills(list,prev){return list.filter(b=>String(b.name||"").trim()).map(b=>{const old=(prev||[]).find(p=>p.name===b._orig);const o={...(old||{}),name:b.name.trim(),amount:n2(b.amount)};const d=day(b.dueDay);if(d)o.dueDay=d;else delete o.dueDay;return o})}
+function buildBills(list,prev){return list.filter(b=>String(b.name||"").trim()).map(b=>{const old=(prev||[]).find(p=>p.name===b._orig);const o={...(old||{}),name:b.name.trim(),amount:n2(b.amount)};const d=day(b.dueDay);if(d)o.dueDay=d;else delete o.dueDay;if(b.card)o.card=b.card;else delete o.card;return o})}
 function buildDebts(list,startMonth){return list.filter(d=>String(d.name||"").trim()&&Number(d.monthly)>0).map(d=>{const total=Math.max(1,Math.round(Number(d.total)||1)), cur=Math.min(total,Math.max(1,Math.round(Number(d.current)||1)));
   return {name:d.name.trim(),monthly:n2(d.monthly),current:cur,total,lender:String(d.lender||"Loan").trim()||"Loan",dueDay:day(d.dueDay)||1,_sm:startMonth}})}
 function normalizeDebts(debts,startMonth){ // keep everything relative to config.startMonth
@@ -1824,7 +1863,7 @@ function renderManage(){ if(NR) setTimeout(refreshAuto,0);
         const spendFrom=[...(config.spendFrom||[]).filter(v=>v.from<from).map(v=>({from:v.from,spend:keep(v.spend)})),{from,spend:sp}];
         await call("setConfig",{patch:{spend:keep(config.spend),spendFrom}})})}],
     ["Bills",config.bills.map(b=>b.name).join(", ")||"None",()=>{const d=config.bills.map(b=>({...b,_orig:b.name}));
-      openManage("Bills","",b=>listEditor(b,d,F.bills,"Add bill",{name:"",amount:"",dueDay:""}),async()=>{await call("setConfig",{patch:{bills:buildBills(d,config.bills)}})})}],
+      openManage("Bills","",b=>listEditor(b,d,F.bills,"Add bill",{name:"",amount:"",dueDay:"",card:""}),async()=>{await call("setConfig",{patch:{bills:buildBills(d,config.bills)}})})}],
     ["Installments & loans",config.debts.map(x=>x.name).join(", ")||"None",()=>{const m=mkey(now);const d=config.debts.map(x=>({...x,current:Math.min(x.total,x.current+Math.max(0,mDiff(config.startMonth,m)))}));
       openManage("Installments & loans","Payment # is the one due this month.",b=>listEditor(b,d,F.debts,"Add installment",{name:"",monthly:"",lender:"",current:"",total:"",dueDay:""}),
       async()=>{const debts=normalizeDebts(buildDebts(d,m),config.startMonth);await call("setConfig",{patch:{debts,cards:buildCards(CARDS().filter(c=>c.start!=null).map(c=>({id:c.id,name:c.name,balance:B[c.id]?B[c.id].owed:c.start,dueDay:c.dueDay})).map(c=>({...c})),debts,CARDS().map(c=>({...c,_owed:B[c.id]?.owed})))}})})}],

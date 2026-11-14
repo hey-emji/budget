@@ -51,3 +51,31 @@ await test("back: closes the log panel, asks first if an amount is typed", async
   openSheet(); await wait(30); eq(window.__bujjetBack(),"handled"); ok($("addForm").hidden,"sheet should close");
   openSheet(); $("amt").value="99"; window.__bujjetBack(); await wait(30); ok(!$("dlg").hidden,"confirm should show"); $("dlgNo").click(); await wait(30); ok(!$("addForm").hidden,"sheet should stay"); closeSheet(); });
 await test("back: other tab goes to Today, then warns before leaving", async()=>{ tab("debts"); await wait(30); window.__bujjetBack(); await wait(30); eq(curView,"today"); eq(window.__bujjetBack(),"handled"); eq(window.__bujjetBack(),"exit"); });
+
+// ---- Categories & subcategories (v37)
+await test("new categories added at ₱0, old ids and amounts kept", async()=>{ const ids=config.spend.map(x=>x.id);
+  for(const id of ["groceries","foodout","transport","household","personal","health","family","fun","shopping","learning"]) ok(ids.includes(id),"missing "+id);
+  for(const id of ["health","family","fun","shopping","learning"]) eq(config.spend.find(x=>x.id===id).amount,0,id);
+  eq(config.catsV,2); ok(CATS().some(c=>c.id==="fees"),"fees in CATS"); });
+await test("+ panel: subcategory is optional and saved with the entry", async()=>{ const n0=expenses.length;
+  openSheet(); await wait(30); pickCat("transport"); await wait(20); ok(!$("subChips").hidden,"sub chips hidden"); ok($("subChips").textContent.includes("Fuel"),"no Fuel");
+  pickSub("Fuel"); $("amt").value="800"; $("addForm").requestSubmit(); await wait(300); eq(expenses.length,n0+1); const e=expenses.find(x=>x.amount===800&&x.cat==="transport"); eq(e&&e.sub,"Fuel");
+  openSheet({mode:"inc"}); await wait(20); ok($("subChips").hidden,"no subs for income"); closeSheet(); });
+await test("Planned vs Actual shows the subcategory split", async()=>{ openIns(); await wait(80); ok($("insCats").textContent.includes("Fuel ₱800"),$("insCats").textContent.slice(0,200)); closeIns(); await wait(30); });
+await test("Detect guesses the new categories", async()=>{ const cats=CATS(); eq(guessCat("MERCURY DRUG QC",cats),"health"); eq(guessCat("SHOPEE PH",cats),"shopping"); eq(guessCat("CODASHOP",cats),"fun"); eq(guessCat("JOLLIBEE",cats),"foodout"); });
+await test("Fees don't use up the planned budget", async()=>{ render(); const b0=window._budgetLeft;
+  await call("add",{expense:{id:"tfee",date:"2026-11-14",cat:"fees",amount:150,note:"Annual fee",acct:"maribank"}}); near(window._budgetLeft,b0); await call("delete",{id:"tfee"}); });
+
+// ---- Reserved money (v37)
+await test("Money left to spend = spendable balances minus payments due before payday from them", async()=>{
+  await call("setConfig",{patch:{bills:[...config.bills,{name:"Test power",amount:2000,dueDay:20,card:"maribank"},{name:"Test card bill",amount:900,dueDay:21,card:"maya"},{name:"Test savings bill",amount:700,dueDay:22,card:"unionbank"}],
+    subs:[...config.subs,{name:"Testcloud",amount:300,card:"maribank",day:25,from:"2026-11",fromDate:"2026-11-01"}]}}); render(); await wait(30);
+  const names=(window._resv||[]).map(u=>u.make().querySelector("strong").textContent);
+  ok(names.includes("Test power"),"bill from Maribank missing: "+names); ok(names.includes("Testcloud"),"auto-debit missing: "+names);
+  ok(!names.includes("Test card bill"),"card-paid bill should not be reserved"); ok(!names.includes("Test savings bill"),"non-spendable account should not be reserved");
+  ok(!names.includes("Testflix"),"Testflix (next charge Dec 13) is after payday");
+  const B=balances(), have=sum(config.accounts.filter(a=>a.spendable!==false),a=>B[a.id].bal);
+  eq($("heroLeft").textContent,peso(have-window._reserved)); ok(window._reserved>=2300-0.01,"reserved "+window._reserved);
+  ok($("heroResv")&&$("heroResv").textContent.includes("set aside"),"hero link"); $("heroResv").click(); await wait(30); ok(!$("upDlg").hidden,"list opens"); eq($("upTitle").textContent,"Set aside before payday"); closeUpcoming();
+  openIns(); await wait(80); near(parseFloat($("insMoney").textContent.replace(/[^\d.-]/g,""))||0,parseFloat(peso(window._money).replace(/[^\d.-]/g,""))||0); closeIns(); await wait(30); });
+await test("bill Paid from is kept when bills are edited", async()=>{ const b=buildBills(config.bills.map(x=>({...x,_orig:x.name})),config.bills); eq(b.find(x=>x.name==="Test power").card,"maribank"); });
