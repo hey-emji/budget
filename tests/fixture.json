@@ -1,0 +1,341 @@
+{
+ "config": {
+  "startMonth": "2026-11",
+  "incomePerPayday": 25000,
+  "debts": [
+   {
+    "name": "MacBook",
+    "monthly": 3330.14,
+    "current": 12,
+    "total": 12,
+    "lender": "Unionbank",
+    "dueDay": 6
+   },
+   {
+    "name": "iPhone",
+    "monthly": 1809.66,
+    "current": 15,
+    "total": 24,
+    "lender": "Metrobank",
+    "dueDay": 3
+   },
+   {
+    "name": "Xiaomi 17T",
+    "monthly": 1926.6,
+    "current": 4,
+    "total": 12,
+    "lender": "Unionbank",
+    "dueDay": 6
+   },
+   {
+    "name": "Abenson",
+    "monthly": 956.34,
+    "current": 12,
+    "total": 24,
+    "lender": "Metrobank",
+    "dueDay": 3
+   },
+   {
+    "name": "Cash to Go 1",
+    "monthly": 1139.2,
+    "current": 5,
+    "total": 24,
+    "lender": "Metrobank",
+    "dueDay": 3
+   },
+   {
+    "name": "Cash to Go 2",
+    "monthly": 8556.82,
+    "current": 5,
+    "total": 12,
+    "lender": "Metrobank",
+    "dueDay": 3
+   },
+   {
+    "name": "Cash to Go 3",
+    "monthly": 4844.44,
+    "current": 7,
+    "total": 9,
+    "lender": "Metrobank",
+    "dueDay": 3
+   },
+   {
+    "name": "Cash to Go 4",
+    "monthly": 8758.39,
+    "current": 7,
+    "total": 12,
+    "lender": "Metrobank",
+    "dueDay": 3
+   },
+   {
+    "name": "Personal Loan",
+    "monthly": 15000,
+    "current": 0,
+    "total": 36,
+    "dueDay": 1
+   }
+  ],
+  "bills": [
+   {
+    "name": "Electricity",
+    "amount": 3200.0
+   },
+   {
+    "name": "Water",
+    "amount": 400.0
+   },
+   {
+    "name": "HOA dues",
+    "amount": 480.0
+   },
+   {
+    "name": "Dad's wifi",
+    "amount": 1120.0,
+    "dueDay": 11,
+    "paidMonth": "2026-11"
+   },
+   {
+    "name": "Home wifi",
+    "amount": 1253.6,
+    "dueDay": 10,
+    "paidMonth": "2026-11"
+   }
+  ],
+  "spend": [
+   {
+    "id": "groceries",
+    "name": "Food & Groceries",
+    "amount": 6400
+   },
+   {
+    "id": "foodout",
+    "name": "Dining Out",
+    "amount": 1500
+   },
+   {
+    "id": "transport",
+    "name": "Transportation",
+    "amount": 0
+   },
+   {
+    "id": "household",
+    "name": "Household",
+    "amount": 900
+   },
+   {
+    "id": "personal",
+    "name": "Personal",
+    "amount": 500
+   }
+  ],
+  "subs": [
+   {
+    "name": "YouTube Premium",
+    "amount": 303.2
+   },
+   {
+    "name": "Apple",
+    "amount": 384.0
+   },
+   {
+    "name": "Claude Pro",
+    "amount": 896.0
+   },
+   {
+    "name": "Google AI Plus",
+    "amount": 400.0
+   },
+   {
+    "name": "HBO Max",
+    "amount": 240.0
+   }
+  ],
+  "cigPlan": [
+   {
+    "month": "2026-10",
+    "cap": 2500
+   },
+   {
+    "month": "2026-11",
+    "cap": 2500
+   },
+   {
+    "month": "2026-12",
+    "cap": 2000
+   },
+   {
+    "month": "2027-01",
+    "cap": 1500
+   },
+   {
+    "month": "2027-02",
+    "cap": 1000
+   }
+  ],
+  "credits": [
+   {
+    "label": "Unionbank overpayment",
+    "lender": "Unionbank",
+    "amount": 1432.0,
+    "month": "2026-11"
+   },
+   {
+    "label": "Paid early with the \u20b170k payment (Dec 3 bill)",
+    "lender": "Metrobank",
+    "amount": 26064.85,
+    "month": "2026-11"
+   },
+   {
+    "label": "Leftover credit from the \u20b170k payment",
+    "lender": "Metrobank",
+    "amount": 12192.89,
+    "month": "2026-12"
+   }
+  ],
+  "card": {
+   "name": "Metrobank",
+   "carryover": 21310.24,
+   "paidOff": 21310.24,
+   "financeCharge": 1786.29,
+   "balance": -15241.11,
+   "note": "Cleared with your \u20b170,000 payment on Nov 9. About \u20b115,241 credit left on the card (before any finance charge on the Nov 12 statement).",
+   "cardId": "metrobank"
+  },
+  "spendFrom": [
+   {
+    "from": "2026-11-15",
+    "spend": [
+     {
+      "id": "groceries",
+      "name": "Food & Groceries",
+      "amount": 6400
+     },
+     {
+      "id": "foodout",
+      "name": "Dining Out",
+      "amount": 1500
+     },
+     {
+      "id": "transport",
+      "name": "Transportation",
+      "amount": 500
+     },
+     {
+      "id": "household",
+      "name": "Household",
+      "amount": 900
+     },
+     {
+      "id": "personal",
+      "name": "Personal",
+      "amount": 500
+     }
+    ]
+   }
+  ],
+  "accounts": [
+   {
+    "id": "maribank",
+    "name": "Maribank",
+    "start": 1421.09,
+    "startDate": "2026-11-09",
+    "startTs": "2026-11-08T20:13:58.657Z"
+   },
+   {
+    "id": "unionbank",
+    "name": "Unionbank savings",
+    "start": 80035.41,
+    "startDate": "2026-11-09",
+    "startTs": "2026-11-08T20:13:27.518Z",
+    "spendable": false
+   },
+   {
+    "id": "gcash",
+    "name": "Gcash",
+    "start": 500,
+    "startDate": "2026-11-09"
+   },
+   {
+    "id": "mbsav",
+    "name": "Metrobank Savings",
+    "start": 2000,
+    "startDate": "2026-11-09"
+   }
+  ],
+  "cards": [
+   {
+    "id": "maya",
+    "name": "Maya Credit Card",
+    "short": "Maya CC",
+    "dueDay": 16,
+    "start": 24626.95,
+    "startDate": "2026-11-09",
+    "statement": 11800.69,
+    "statementDue": "2026-11-16",
+    "minDue": 400.0
+   },
+   {
+    "id": "maribankcc",
+    "name": "Maribank Credit",
+    "short": "Maribank CC",
+    "dueDay": 4,
+    "start": 10093.4,
+    "startDate": "2026-11-09"
+   },
+   {
+    "id": "metrobank",
+    "name": "Metrobank card",
+    "short": "Metrobank CC",
+    "lender": "Metrobank"
+   },
+   {
+    "id": "unionbankcc",
+    "name": "Unionbank card",
+    "short": "Unionbank CC",
+    "lender": "Unionbank"
+   }
+  ],
+  "paidCards": {
+   "Metrobank": "2026-12"
+  },
+  "salaryTo": "unionbank",
+  "name": "Test User",
+  "app": "bujjet",
+  "v": 1,
+  "vicesCat": "personal"
+ },
+ "expenses": [
+  {
+   "id": "t1",
+   "date": "2026-11-09",
+   "cat": "groceries",
+   "amount": 300,
+   "note": "Mcdo breakfast",
+   "acct": "maribank",
+   "ts": "2026-11-09T01:00:00Z",
+   "ref": ""
+  },
+  {
+   "id": "t2",
+   "date": "2026-11-10",
+   "cat": "other",
+   "amount": 699,
+   "note": "Other",
+   "acct": "metrobank",
+   "ts": "2026-11-10T01:00:00Z",
+   "ref": ""
+  },
+  {
+   "id": "t3",
+   "date": "2026-11-11",
+   "cat": "other",
+   "amount": 1000,
+   "note": "Donation",
+   "acct": "maribank",
+   "ts": "2026-11-11T01:00:00Z",
+   "ref": ""
+  }
+ ],
+ "paydays": {},
+ "savedAt": "2026-11-14T00:00:00.000Z"
+}
