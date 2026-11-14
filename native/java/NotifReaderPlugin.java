@@ -40,6 +40,10 @@ public class NotifReaderPlugin extends Plugin {
         boolean on = NotificationManagerCompat.getEnabledListenerPackages(getContext()).contains(getContext().getPackageName());
         JSObject r = new JSObject();
         r.put("enabled", on);
+        android.content.SharedPreferences sp = getContext().getSharedPreferences("bujjet_notifs", android.content.Context.MODE_PRIVATE);
+        r.put("connectedAt", sp.getLong("connectedAt", 0));
+        r.put("seenCount", sp.getLong("seenCount", 0));
+        r.put("lastSeenAt", sp.getLong("lastSeenAt", 0));
         call.resolve(r);
     }
 

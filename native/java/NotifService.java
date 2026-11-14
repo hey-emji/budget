@@ -26,6 +26,7 @@ public class NotifService extends NotificationListenerService {
 
     @Override
     public void onListenerConnected() {
+        try { getSharedPreferences("bujjet_notifs", MODE_PRIVATE).edit().putLong("connectedAt", System.currentTimeMillis()).apply(); } catch (Exception ignored) { }
         try {
             StatusBarNotification[] all = getActiveNotifications();
             if (all != null) for (StatusBarNotification s : all) handle(s);
@@ -55,6 +56,8 @@ public class NotifService extends NotificationListenerService {
             if (sb.length() > body.length()) body = sb.toString();
         }
         String t = title == null ? "" : title.toString();
+        try { android.content.SharedPreferences sp = getSharedPreferences("bujjet_notifs", MODE_PRIVATE);
+              sp.edit().putLong("seenCount", sp.getLong("seenCount", 0) + 1).putLong("lastSeenAt", System.currentTimeMillis()).apply(); } catch (Exception ignored) { }
         if (!MONEY.matcher(t + " " + body).find()) return;
         String label = pkg;
         try {
