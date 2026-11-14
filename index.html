@@ -622,10 +622,10 @@ function plan(date){
   for(const id of spendFor(date).map(x=>x.id).reverse()){ if(short<=0) break; const c=Math.min(half(id),short); if(c>0){cuts.push({id,name:names[id],amount:c}); short-=c;} }
   return {date,key,m,income,actual:paydays[key]?.income!=null,inst,bills,living,cig,left,cuts,uncovered:short,final:left<0?-short:left,cu};
 }
-function upcomingPaydays(n){
+function upcomingPaydays(n,keepReceived){
   const out=[];let y=now.getFullYear(),mo=now.getMonth(),half=now.getDate()<=15?1:2;
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  while(out.length<n){const d=payDate(y,mo,half);const g=paydays&&paydays[ymd(d)]&&paydays[ymd(d)].got;if(d>=today&&!(g&&g<=ymd(today)))out.push(d);if(half===1)half=2;else{half=1;mo++;if(mo>11){mo=0;y++}}}
+  while(out.length<n){const d=payDate(y,mo,half);const g=paydays&&paydays[ymd(d)]&&paydays[ymd(d)].got;if(d>=today&&(keepReceived||!(g&&g<=ymd(today))))out.push(d);if(half===1)half=2;else{half=1;mo++;if(mo>11){mo=0;y++}}}
   return out;
 }
 function spendFor(d){const k=typeof d==="string"?d:ymd(d);let sp=config.spend;[...(config.spendFrom||[])].sort((a,b)=>a.from<b.from?-1:1).forEach(x=>{if(x.from<=k)sp=x.spend});return sp}
@@ -868,7 +868,7 @@ function setChecks(k,v){
   checkTimer=setTimeout(async()=>{try{await call("setConfig",{patch:{setAside:config.setAside}})}catch(e){toast("Couldn't sync your checklist. It'll retry next time.")}},700);
 }
 function renderPaydays(){
-  const pds=upcomingPaydays(12); if(pdIdx>=pds.length) pdIdx=0;
+  const pds=upcomingPaydays(12,true); if(pdIdx>=pds.length) pdIdx=0;
   const p=plan(pds[pdIdx]), m=p.m, sp=spendFor(p.date), cutOf=id=>sum(p.cuts.filter(c=>c.id===id),c=>c.amount);
   const groups=[];
   // cards & loans
@@ -887,7 +887,7 @@ function renderPaydays(){
   const checks=getChecks(p.key), got=i=>{const v=checks[i.k];return v==null?0:(typeof v==="number"&&v!==1?v:i.amt)};
   const all=groups.flatMap(g=>g.items), total=sum(all,i=>i.amt), done=sum(all,i=>Math.min(got(i),i.amt));
   const c=$("nextPayCard");
-  c.innerHTML=`<div class="pernav"><button type="button" id="pdPrev" aria-label="Previous payday" ${pdIdx===0?"disabled":""}>‹</button><span>${pdIdx===0?"Next payday · ":""}${dName(p.date)}</span><button type="button" id="pdNext" aria-label="Next payday">›</button></div>
+  c.innerHTML=`<div class="pernav"><button type="button" id="pdPrev" aria-label="Previous payday" ${pdIdx===0?"disabled":""}>‹</button><span>${(()=>{const g=paydays[p.key]&&paydays[p.key].got;return g&&g<=ymd(new Date())?"This payday · "+dName(p.date)+" (received "+dName(new Date(g+"T00:00"))+")":(pdIdx===0?"Next payday · ":"")+dName(p.date)})()}</span><button type="button" id="pdNext" aria-label="Next payday">›</button></div>
   <div class="row"><h2>Payday plan</h2><span class="pill ${p.final<0?"bad":p.cuts.length?"warn":"good"}">${p.final<0?peso(-p.final)+" short":peso(p.final)+" to save"}</span></div>
   <div class="row"><span>Pay ${p.actual?(p.date>new Date()?'<span class="small muted">(your estimate)</span>':"received"):'<span class="small muted">(expected)</span>'}</span><strong class="bigish">${peso2(p.income)}</strong></div>
   <form id="payForm" class="inline" style="align-items:end"><div><label class="small muted" for="payAmt">Actual or expected pay for ${dName(p.date)}</label><input id="payAmt" inputmode="decimal" placeholder="${p.income}"></div><button class="primary" type="submit">Update pay</button></form>
