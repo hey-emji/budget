@@ -79,3 +79,6 @@ await test("Money left to spend = spendable balances minus payments due before p
   ok($("heroResv")&&$("heroResv").textContent.includes("set aside"),"hero link"); $("heroResv").click(); await wait(30); ok(!$("upDlg").hidden,"list opens"); eq($("upTitle").textContent,"Set aside before payday"); closeUpcoming();
   openIns(); await wait(80); near(parseFloat($("insMoney").textContent.replace(/[^\d.-]/g,""))||0,parseFloat(peso(window._money).replace(/[^\d.-]/g,""))||0); closeIns(); await wait(30); });
 await test("bill Paid from is kept when bills are edited", async()=>{ const b=buildBills(config.bills.map(x=>({...x,_orig:x.name})),config.bills); eq(b.find(x=>x.name==="Test power").card,"maribank"); });
+await test("Today card lists each spending account's balance, then set-asides, then planned budget", async()=>{ render(); await wait(30); const B=balances();
+  const t=$("heroAccts").textContent; for(const a of config.accounts.filter(a=>a.spendable!==false)) ok(t.includes(a.name+" "+peso(B[a.id].bal)),"missing "+a.name+": "+t);
+  ok($("heroSub").textContent.includes("Planned budget left"),"planned line"); });

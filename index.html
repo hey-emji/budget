@@ -120,7 +120,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
-#todayHero{cursor:pointer}.linkbtn{background:none;border:0;padding:4px 0 0;margin:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:0}.subchips{margin-top:6px}.chip.sub{font-size:.85em;padding:5px 10px}#heroLabel::after{content:"  ›";opacity:.7}
+#todayHero{cursor:pointer}.linkbtn{display:block;text-align:left;background:none;border:0;padding:3px 0;margin:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:0}.subchips{margin-top:6px}.chip.sub{font-size:.85em;padding:5px 10px}#heroLabel::after{content:"  ›";opacity:.7}
 .insheet{max-height:90vh;overflow-y:auto;overscroll-behavior:contain}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.45;justify-self:center;margin:2px 0;box-shadow:0 0 0 14px transparent}
 .insum{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}.insum .r{text-align:right}
@@ -248,7 +248,7 @@ button.danger{background:var(--bad);color:#fff;border:none;border-radius:14px;pa
 @keyframes shim{from{background-position:200% 0}to{background-position:-200% 0}}
 .hero.sticky{position:sticky;top:calc(8px + env(safe-area-inset-top));z-index:4;transition:padding .3s ease,border-radius .3s ease,box-shadow .3s ease}
 .hero.sticky .big{transition:font-size .3s ease}
-.hero.sticky #heroSub{max-height:40px;overflow:hidden;transition:max-height .3s ease,opacity .25s ease}
+.hero.sticky #heroSub{max-height:160px;overflow:hidden;transition:max-height .3s ease,opacity .25s ease}
 .hero.sticky.compact{padding:12px 16px;border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.18)}
 .hero.sticky.compact .big{font-size:28px}
 .hero.sticky.compact #heroSub{max-height:0;opacity:0}
@@ -813,12 +813,15 @@ function render(){
     $("heroLeft").dataset.budget=left; window._budgetLeft=left; window._money=money; window._have=have; window._spendNames=spendAcc.map(a=>a.name).join(" + ");}
   else { $("heroLabel").textContent="Left until payday"; $("heroLeft").textContent=peso(left); window._money=null; }
   const daysLeft=Math.max(1,Math.round((periodAt(0).end-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5));
-  const hs=$("heroSub"); hs.textContent=window._money!=null
-    ?`${peso(window._have)} in ${window._spendNames}`+(reserved>0.009?"":` · Planned budget left ${peso(left)}`)+` · about ${peso(Math.max(0,Math.min(left,window._money))/daysLeft)} a day for ${daysLeft} days`
-    :`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(Math.max(0,left)/daysLeft)} a day for ${daysLeft} days`;
-  if(window._money!=null&&reserved>0.009){ const b=document.createElement("button"); b.type="button"; b.className="linkbtn"; b.id="heroResv";
-    b.textContent=`${peso(reserved)} set aside for ${resv.length} payment${resv.length===1?"":"s"} before payday ›`;
-    b.onclick=ev=>{ev.stopPropagation(); openReserved();}; hs.append(document.createElement("br"),b); }
+  const hs=$("heroSub"); hs.textContent=""; const line=t=>{const d=document.createElement("div");d.textContent=t;hs.appendChild(d);return d;};
+  const perDay=window._money!=null?Math.max(0,Math.min(left,window._money))/daysLeft:Math.max(0,left)/daysLeft;
+  if(window._money!=null){ const B=balances(); const parts=spendAcc.map(a=>({n:a.name,v:B[a.id].bal}));
+    line(parts.map(p=>`${p.n} ${peso(p.v)}`).join(" · ")).id="heroAccts";
+    if(reserved>0.009){ const b=document.createElement("button"); b.type="button"; b.className="linkbtn"; b.id="heroResv";
+      b.textContent=`− ${peso(reserved)} set aside for ${resv.length} payment${resv.length===1?"":"s"} before payday ›`;
+      b.onclick=ev=>{ev.stopPropagation(); openReserved();}; hs.appendChild(b); }
+    line(`Planned budget left ${peso(left)} · about ${peso(perDay)} a day for ${daysLeft} days`); }
+  else line(`${peso(totS+other)} spent of ${peso(totB)} · about ${peso(perDay)} a day for ${daysLeft} days`);
   const pr=$("planRow"); if(pr){ if(pOff===0){ pr.hidden=false; $("planLeft").textContent=peso(left);
     const base="This period's budgets minus what you've logged.";
     $("planNote").textContent=window._money==null?base:window._money<left-0.5?`${base} You have ${peso(left-window._money)} less in ${window._spendNames} than planned (after set-asides), so ${peso(window._money)} is your real limit.`:`${base} Money left to spend at the top is what's actually in ${window._spendNames}.`;
