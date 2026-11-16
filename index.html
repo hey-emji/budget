@@ -304,6 +304,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 #syncPill.saving::before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:fxspin .7s linear infinite}
 .toast.ok::before{content:"✓";display:inline-block;margin-right:7px;font-weight:800;color:var(--good)}
 .toast.err::before{content:"!";display:inline-grid;place-items:center;width:17px;height:17px;margin-right:7px;border-radius:50%;background:var(--bad);color:#fff;font-weight:800;font-size:12px}
+.remgrid{display:grid;gap:10px}.remgrid label.f{display:grid;gap:4px;font-size:14px}.remgrid select,.remgrid input[type=time]{width:100%}.remrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fxrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0}
 .fxrow input{width:20px;height:20px;accent-color:var(--accent)}
 @keyframes fxspin{to{transform:rotate(360deg)}}
@@ -422,6 +423,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <div class="card"><h2>Preferences</h2>
         <label class="fxrow small"><span>Sounds and vibration on taps and saves</span><input type="checkbox" id="fxToggle"></label>
       </div>
+      <div class="card" id="remCard"><h2>Reminders</h2><div id="remBody" class="remgrid"></div></div>
     <div class="card" id="dataCard">
       <div class="row"><h2>Backup & data</h2><span class="pill good" id="localPill">On this phone</span></div>
       <div class="small muted" id="backupInfo"></div>
@@ -539,6 +541,8 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
+const LN=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
+  return reg?reg("LocalNotifications"):((C&&C.Plugins&&C.Plugins.LocalNotifications)||null); }catch(e){ return null; } })();
 const GA=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   return reg?reg("GoogleAuth"):((C&&C.Plugins&&C.Plugins.GoogleAuth)||null); }catch(e){ return null; } })();
 
@@ -806,6 +810,7 @@ function render(){
     if(ymd(d)<ymd(t)||expenses.some(e=>e.autoSub===k0)||(config.autoSkip||[]).includes(k0)) d=subChargeDate(x,mAdd(m0,1));
     ups.push({date:d,amt:Number(x.amount)||0,from:x.card,auto:true,make:()=>mkRow(x.name,`Auto-charged to ${acctName(x.card)} on ${dName(d)}. bujjet logs it that day.`,x.amount,null,"Auto")}); });
   ups.sort((x,y)=>x.date-y.date);
+  window._remUps=ups; queueReminders();
   const spendAcc=(config.accounts||[]).filter(a=>a.spendable!==false);
   const resv=reservedItems(ups,spendAcc,next), reserved=sum(resv,u=>u.amt); window._reserved=reserved; window._resv=resv;
   if(spendAcc.length){const B=balances(), have=sum(spendAcc,a=>B[a.id].bal), money=have-reserved;
@@ -1274,6 +1279,58 @@ function renderIns(){
 }
 function subSplit(es){ const m={}; es.forEach(e=>{ if(e.sub) m[e.sub]=(m[e.sub]||0)+e.amount; }); const ks=Object.keys(m); if(!ks.length) return "";
   const rest=sum(es.filter(e=>!e.sub),e=>e.amount); return `<div class="small muted isub">`+ks.sort((a,b)=>m[b]-m[a]).map(k=>`${esc(k)} ${peso(m[k])}`).concat(rest>0.009?[`Unsorted ${peso(rest)}`]:[]).join(" · ")+`</div>`; }
+// ---- Reminders (Android app only). Settings live on this phone (localStorage), not in synced data.
+const REM_DEFAULT={freq:"off",t1:"20:00",t2:"12:30",wd:1,due:false,dueT:"09:00"};
+function remGet(){ try{ return {...REM_DEFAULT,...JSON.parse(localStorage.getItem("bujjet.rem")||"{}")}; }catch(e){ return {...REM_DEFAULT}; } }
+function remSet(r){ try{ localStorage.setItem("bujjet.rem",JSON.stringify(r)); }catch(e){} }
+const hm=t=>{const [h,m]=String(t||"20:00").split(":").map(Number);return {hour:h||0,minute:m||0}};
+// What to schedule (pure, so it can be tested): repeating log reminders + dated payment/payday reminders for the next 35 days.
+function remPlan(r,ups,paydaysAhead,today){ const out=[]; const LOG={title:"Log today's spending",body:"Tap to add what you spent. It takes a few seconds.",extra:{go:"log"}};
+  if(r.freq==="daily") out.push({id:1001,...LOG,on:hm(r.t1)});
+  if(r.freq==="twice"){ out.push({id:1001,...LOG,on:hm(r.t1)}); out.push({id:1002,...LOG,on:hm(r.t2)}); }
+  if(r.freq==="weekdays") [2,3,4,5,6].forEach((w,i)=>out.push({id:1011+i,...LOG,on:{weekday:w,...hm(r.t1)}}));   // 1 = Sunday
+  if(r.freq==="weekly") out.push({id:1021,...LOG,title:"Log this week's spending",on:{weekday:Number(r.wd)||1,...hm(r.t1)}});
+  if(r.due){ const t=hm(r.dueT), lim=new Date(today.getTime()+35*864e5); let id=2001;
+    const at=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate(),t.hour,t.minute);return x};
+    (ups||[]).filter(u=>u.date<=lim).forEach(u=>{ const name=u.name||"A payment", amt=u.amt>0?" · "+peso2(u.amt):"";
+      const before=new Date(u.date.getFullYear(),u.date.getMonth(),u.date.getDate()-1);
+      [[before,`${name} is due tomorrow`],[u.date,`${name} is due today`]].forEach(([d,title])=>{ const w=at(d); if(w>today&&id<2100) out.push({id:id++,title,body:(u.auto?"Auto-charged":"Mark it paid in bujjet once it's done")+amt,at:w,extra:{go:"today"}}); }); });
+    let pid=3001; (paydaysAhead||[]).forEach(d=>{ const w=at(d); if(w>today&&w<=lim) out.push({id:pid++,title:"Payday today",body:"Update your pay and tick off what you set aside in Paydays.",at:w,extra:{go:"paydays"}}); }); }
+  return out; }
+let remTimer=null, remSig="";
+function queueReminders(){ if(!LN) return; clearTimeout(remTimer); remTimer=setTimeout(scheduleReminders,1500); }
+async function scheduleReminders(){ if(!LN||!config) return; const r=remGet();
+  const ups=(window._remUps||[]).map(u=>({date:u.date,amt:u.amt,auto:u.auto,name:(()=>{try{return u.make().querySelector("strong").textContent}catch(e){return ""}})()}));
+  const plan=remPlan(r,ups,upcomingPaydays(3),new Date()); const sig=JSON.stringify(plan); if(sig===remSig) return;
+  try{ const p=await LN.checkPermissions(); if(p.display!=="granted"&&plan.length) return;
+    const pend=await LN.getPending(); const mine=(pend.notifications||[]).filter(n=>n.id>=1000&&n.id<4000).map(n=>({id:n.id})); if(mine.length) await LN.cancel({notifications:mine});
+    if(plan.length) await LN.schedule({notifications:plan.map(n=>({id:n.id,title:n.title,body:n.body,extra:n.extra,smallIcon:"ic_tile",
+      schedule:n.on?{on:n.on,allowWhileIdle:true}:{at:n.at,allowWhileIdle:true}}))});
+    remSig=sig; }catch(e){ console.log("reminders",e); } }
+function renderReminders(){ const box=$("remBody"); if(!box) return; const r=remGet(); box.textContent="";
+  if(!NATIVE){ box.innerHTML='<div class="small muted">Reminders work in the bujjet Android app. Set them there under Settings → Reminders.</div>'; return; }
+  const sel=(label,key,opts)=>{const l=document.createElement("label");l.className="f";l.innerHTML=`<span class="small muted"></span><select></select>`;l.firstChild.textContent=label;
+    const s=l.querySelector("select");opts.forEach(([v,t])=>{const o=document.createElement("option");o.value=v;o.textContent=t;s.appendChild(o)});s.value=String(r[key]);s.onchange=()=>save(key,s.value);return l;};
+  const tim=(label,key)=>{const l=document.createElement("label");l.className="f";l.innerHTML=`<span class="small muted"></span><input type="time">`;l.firstChild.textContent=label;const i=l.querySelector("input");i.value=r[key];i.onchange=()=>save(key,i.value||REM_DEFAULT[key]);return l;};
+  const row=(...k)=>{const d=document.createElement("div");d.className=k.length>1?"remrow":"";k.forEach(x=>d.appendChild(x));return d;};
+  box.appendChild(sel("Remind me to log spending","freq",[["off","Off"],["daily","Every day"],["twice","Twice a day"],["weekdays","Weekdays (Mon–Fri)"],["weekly","Once a week"]]));
+  if(r.freq==="twice") box.appendChild(row(tim("First reminder","t2"),tim("Second reminder","t1")));
+  else if(r.freq==="weekly") box.appendChild(row(sel("Day","wd",[[1,"Sunday"],[2,"Monday"],[3,"Tuesday"],[4,"Wednesday"],[5,"Thursday"],[6,"Friday"],[7,"Saturday"]]),tim("Time","t1")));
+  else if(r.freq!=="off") box.appendChild(tim("Time","t1"));
+  const dl=document.createElement("label"); dl.className="fxrow small"; dl.innerHTML='<span>Payment and payday reminders<br><span class="muted">The day before and on the day a bill, card or loan is due, and on payday</span></span><input type="checkbox">';
+  const cb=dl.querySelector("input"); cb.checked=!!r.due; cb.onchange=()=>save("due",cb.checked); box.appendChild(dl);
+  if(r.due) box.appendChild(tim("Payment reminder time","dueT"));
+  const st=document.createElement("div"); st.className="small muted"; st.id="remStatus"; box.appendChild(st);
+  const tb=document.createElement("button"); tb.type="button"; tb.className="secondary"; tb.textContent="Send a test reminder";
+  tb.onclick=async()=>{ if(!(await remAsk())) return; try{ await LN.schedule({notifications:[{id:3999,title:"bujjet reminders are on",body:"This is how your reminders will look.",smallIcon:"ic_tile",schedule:{at:new Date(Date.now()+3000)},extra:{go:"log"}}]}); toast("Test reminder in 3 seconds"); }catch(e){ toast("Couldn't send a test reminder"); } };
+  box.appendChild(tb); remStatus();
+  async function save(k,v){ const n={...remGet(),[k]:v}; remSet(n); if(n.freq!=="off"||n.due) await remAsk(); remSig=""; renderReminders(); scheduleReminders(); }
+}
+async function remAsk(){ try{ let p=await LN.checkPermissions(); if(p.display!=="granted") p=await LN.requestPermissions(); remStatus(); if(p.display!=="granted"){ toast("Allow notifications for bujjet in Android settings"); return false; } return true; }catch(e){ return false; } }
+async function remStatus(){ const el=$("remStatus"); if(!el||!LN) return; const r=remGet(); if(r.freq==="off"&&!r.due){ el.textContent="Reminders are off."; return; }
+  try{ const p=await LN.checkPermissions(); let t=p.display==="granted"?"":"Notifications are blocked for bujjet. Allow them in Android settings. ";
+    try{ const e=await LN.checkExactNotificationSetting(); if(e&&e.exact_alarm!=="granted") t+="Reminders may arrive a few minutes late (exact alarms are off for bujjet)."; }catch(_){}
+    el.textContent=t||"On. Xiaomi phones: keep bujjet's battery setting on No restrictions so reminders aren't blocked."; }catch(e){ el.textContent=""; } }
 /*PARSER-START*/
 /* ---------- message + receipt reading (all on this phone) ---------- */
 const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank|\bmcc\b/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank|maricard/i],["SeaBank",/sea ?bank/i],
@@ -2048,6 +2105,8 @@ if("serviceWorker" in navigator&&!NATIVE){navigator.serviceWorker.register("sw.j
   // loading spinner while refreshing from the sheet
   if(typeof load==="function"){ const _load=load; load=async function(...a){ const p=pill(); if(p&&/Loading/.test(p.textContent)) p.classList.add("saving"); try{ return await _load.apply(this,a);} finally{ const q=pill(); if(q&&!pend) q.classList.remove("saving"); } }; }
   // settings switch
+  renderReminders(); if(LN){ try{ LN.addListener("localNotificationActionPerformed",a=>{ const go=a&&a.notification&&a.notification.extra&&a.notification.extra.go;
+      setTimeout(()=>{ if(go==="log") openSheet(); else if(go==="paydays"){ const b=document.querySelector('nav .tab[data-v="paydays"]'); b&&b.click(); } },400); }); }catch(e){} }
   const t=$("fxToggle"); if(t){ t.checked=fxOn; t.onchange=()=>{ fxOn=t.checked; try{localStorage.setItem("bujjet.fx",fxOn?"on":"off")}catch(e){} if(fxOn){sOk();buzz(12)} toast(fxOn?"Sounds and vibration on":"Sounds and vibration off"); }; }
 })();
 

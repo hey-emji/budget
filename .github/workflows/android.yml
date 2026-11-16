@@ -21,7 +21,7 @@ jobs:
       - name: Run tests (the build stops if any fail)
         run: node tests/run.mjs
       - name: Install Capacitor
-        run: npm install --no-audit --no-fund @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+        run: npm install --no-audit --no-fund @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest
       - name: Prepare web files
         run: npm run www
       - name: Create Android project
@@ -61,6 +61,9 @@ jobs:
                       <data android:mimeType="text/plain" />
                   </intent-filter>
               </activity>'''
+          perms='<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n    <application'
+          if 'POST_NOTIFICATIONS' not in s:
+              s=s.replace('<application',perms,1)
           if 'PROCESS_TEXT' not in s:
               i=s.index('.MainActivity'); j=s.index('</activity>',i)
               s=s[:j]+filt+s[j+len('</activity>'):]

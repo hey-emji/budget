@@ -86,3 +86,17 @@ await test("bill Paid from is kept when bills are edited", async()=>{ const b=bu
 await test("Today card lists each spending account's balance, then set-asides, then planned budget", async()=>{ render(); await wait(30); const B=balances();
   const t=$("heroAccts").textContent; for(const a of config.accounts.filter(a=>a.spendable!==false)) ok(t.includes(a.name+" "+peso(B[a.id].bal)),"missing "+a.name+": "+t);
   ok($("heroSub").textContent.includes("Planned budget left"),"planned line"); });
+
+// ---- Reminders (v40)
+await test("reminders: log reminders follow how often and what time", async()=>{ const T=new Date(2026,10,16,10,0);
+  eq(remPlan({...REM_DEFAULT},[],[],T).length,0,"off");
+  const d=remPlan({...REM_DEFAULT,freq:"daily",t1:"21:15"},[],[],T); eq(d.length,1); eq(d[0].on,{hour:21,minute:15});
+  eq(remPlan({...REM_DEFAULT,freq:"twice"},[],[],T).length,2,"twice");
+  const w=remPlan({...REM_DEFAULT,freq:"weekdays"},[],[],T); eq(w.map(x=>x.on.weekday),[2,3,4,5,6]);
+  eq(remPlan({...REM_DEFAULT,freq:"weekly",wd:"1",t1:"18:00"},[],[],T)[0].on,{weekday:1,hour:18,minute:0}); });
+await test("reminders: payments due get a day-before and on-the-day reminder; payday too; none in the past", async()=>{ const T=new Date(2026,10,16,10,0);
+  const p=remPlan({...REM_DEFAULT,due:true,dueT:"09:00"},[{date:new Date(2026,10,20),amt:2000,name:"Electricity"},{date:new Date(2026,10,16),amt:500,name:"Today item"},{date:new Date(2027,0,30),amt:1,name:"Too far"}],[new Date(2026,10,30)],T);
+  const titles=p.map(x=>x.title); ok(titles.includes("Electricity is due tomorrow")&&titles.includes("Electricity is due today"),titles.join("|"));
+  ok(!titles.some(t=>t.startsWith("Today item")),"9am today already passed"); ok(!titles.some(t=>t.startsWith("Too far")),"beyond 35 days");
+  ok(titles.includes("Payday today"),"payday"); eq(p.find(x=>x.title==="Electricity is due tomorrow").at.getHours(),9); });
+await test("Settings shows Reminders (web explains it's in the app)", async()=>{ openPrefs(); await wait(50); ok($("remBody").textContent.includes("Android app"),$("remBody").textContent); closePrefs(); await wait(30); });
