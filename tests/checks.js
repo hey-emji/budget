@@ -8,7 +8,11 @@ await test("every tab and Settings render", async()=>{ for(const v of ["paydays"
 
 await test("normal pay period is Oct 30 – Nov 14 and next payday is Nov 15", async()=>{ const p=periodNow(); eq(ymd(p.start),"2026-10-30"); eq(ymd(p.end),"2026-11-15"); eq(ymd(upcomingPaydays(1)[0]),"2026-11-15"); });
 
-await test("Paydays tab opens on the next payday", async()=>{ pdIdx=0; tab("paydays"); await wait(50); ok($("v-paydays").querySelector(".pernav span").textContent.includes("Nov 15"),"title: "+$("v-paydays").querySelector(".pernav span").textContent); tab("today"); });
+const pdTitle=()=>$("v-paydays").querySelector(".pernav span").textContent;
+await test("Paydays tab opens on this period's payday; › is the next, ‹ goes back to past ones", async()=>{ tab("paydays"); await wait(50); ok(pdTitle().includes("This payday · Oct 30"),"title: "+pdTitle());
+  $("pdNext").click(); await wait(30); ok(pdTitle().includes("Next payday · Nov 15"),"next: "+pdTitle());
+  $("pdPrev").click(); await wait(30); ok(pdTitle().includes("This payday · Oct 30"),"back: "+pdTitle()); ok($("pdPrev").disabled,"nothing before you started (Nov 2026)");
+  const sm=config.startMonth; config.startMonth="2026-10"; pdIdx=null; renderPaydays(); $("pdPrev").click(); await wait(30); ok(pdTitle().includes("Past payday · Oct 15"),"past: "+pdTitle()); config.startMonth=sm; pdIdx=null; renderPaydays(); tab("today"); });
 
 const balBefore=balances()[salId()].bal, nExp=expenses.length;
 await test("Income → Salary records the payday's actual pay, adds no entry", async()=>{
@@ -17,7 +21,7 @@ await test("Income → Salary records the payday's actual pay, adds no entry", a
 await test("early salary counts in the balance from the day it arrived", async()=>{ near(balances()[salId()].bal-balBefore,24000); });
 await test("early salary starts the new period that day", async()=>{ const p=periodNow(); eq(ymd(p.start),"2026-11-13"); eq(ymd(p.end),"2026-11-30"); eq(ymd(periodAt(1).end),"2026-11-13"); });
 await test("top card counts down to Nov 30 after early pay", async()=>{ eq(ymd(upcomingPaydays(1)[0]),"2026-11-30"); });
-await test("Paydays tab still shows the received Nov 15 payday (ticks kept)", async()=>{ pdIdx=0; tab("paydays"); await wait(50); const t=$("v-paydays").querySelector(".pernav span").textContent; ok(t.includes("This payday")&&t.includes("Nov 15"),"title: "+t); tab("today"); });
+await test("Paydays tab still shows the received Nov 15 payday (ticks kept)", async()=>{ tab("paydays"); await wait(50); const t=$("v-paydays").querySelector(".pernav span").textContent; ok(t.includes("This payday")&&t.includes("Nov 15"),"title: "+t); tab("today"); });
 
 await test("new loan counts in cards & loans for its first month", async()=>{ ok(instMonth("2026-11")>=15000,"instMonth "+instMonth("2026-11")); });
 
