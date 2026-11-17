@@ -100,3 +100,5 @@ await test("reminders: payments due get a day-before and on-the-day reminder; pa
   ok(!titles.some(t=>t.startsWith("Today item")),"9am today already passed"); ok(!titles.some(t=>t.startsWith("Too far")),"beyond 35 days");
   ok(titles.includes("Payday today"),"payday"); eq(p.find(x=>x.title==="Electricity is due tomorrow").at.getHours(),9); });
 await test("Settings shows Reminders (web explains it's in the app)", async()=>{ openPrefs(); await wait(50); ok($("remBody").textContent.includes("Android app"),$("remBody").textContent); closePrefs(); await wait(30); });
+
+await test("app version is major.minor.patch and shown in Settings → About", async()=>{ ok(/^\d+\.\d+\.\d+$/.test(APP_VERSION),APP_VERSION); ok($("appVer").textContent.includes(APP_VERSION),"about"); });

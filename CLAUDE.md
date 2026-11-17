@@ -15,7 +15,8 @@ bujjet is one file, `index.html` (inline CSS and JS), served at https://bujjet.c
 
 ## APK
 8. Don't send an APK unless the owner asks. When he asks, confirm the latest Android workflow run succeeded (it runs the tests first) and that the APK contains the latest change.
-9. Test builds are signed with `native/signing/test.jks` so updates install in place. Never change it.
+9. Every APK gets a new version: change `APP_VERSION` in `index.html` before the build. Patch (0.5.**1**) for small fixes, minor (0.**6**.0) for bigger changes while testing, major (**1**.0.0) only for a published Play Store release. Tell the owner the version with the APK.
+10. Test builds are signed with `native/signing/test.jks` so updates install in place. Never change it.
 
 ## Product rules
 - Record only what has actually been paid (auto-debits count on their charge day). Nothing is logged without the owner's review, except auto-charged subscriptions he set up.

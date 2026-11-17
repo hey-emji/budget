@@ -435,6 +435,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
       <div class="card"><h2>About</h2>
         <div class="small muted">bujjet keeps your data on this phone only. It doesn't give financial advice.</div>
         <div class="small"><a href="privacy.html">Privacy notice</a> · <a href="terms.html">Terms of use</a></div>
+        <div class="small muted" id="appVer"></div>
       </div>
     </div>
   </section>
@@ -541,6 +542,8 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
+// App version (major.minor.patch). Bump patch for small fixes, minor for bigger changes while testing, major only for a published release.
+const APP_VERSION="0.5.0";
 const LN=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   return reg?reg("LocalNotifications"):((C&&C.Plugins&&C.Plugins.LocalNotifications)||null); }catch(e){ return null; } })();
 const GA=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
@@ -2105,6 +2108,7 @@ if("serviceWorker" in navigator&&!NATIVE){navigator.serviceWorker.register("sw.j
   // loading spinner while refreshing from the sheet
   if(typeof load==="function"){ const _load=load; load=async function(...a){ const p=pill(); if(p&&/Loading/.test(p.textContent)) p.classList.add("saving"); try{ return await _load.apply(this,a);} finally{ const q=pill(); if(q&&!pend) q.classList.remove("saving"); } }; }
   // settings switch
+  { const v=$("appVer"); if(v) v.textContent="Version "+APP_VERSION+(NATIVE?" · Android app":" · web"); }
   renderReminders(); if(LN){ try{ LN.addListener("localNotificationActionPerformed",a=>{ const go=a&&a.notification&&a.notification.extra&&a.notification.extra.go;
       setTimeout(()=>{ if(go==="log") openSheet(); else if(go==="paydays"){ const b=document.querySelector('nav .tab[data-v="paydays"]'); b&&b.click(); } },400); }); }catch(e){} }
   const t=$("fxToggle"); if(t){ t.checked=fxOn; t.onchange=()=>{ fxOn=t.checked; try{localStorage.setItem("bujjet.fx",fxOn?"on":"off")}catch(e){} if(fxOn){sOk();buzz(12)} toast(fxOn?"Sounds and vibration on":"Sounds and vibration off"); }; }

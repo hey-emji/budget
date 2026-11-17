@@ -93,6 +93,17 @@ jobs:
           }
           dependencies { implementation 'com.google.android.gms:play-services-auth:21.3.0' }
           GR
+      - name: Set app version (from APP_VERSION in index.html)
+        run: |
+          python3 - <<'PY'
+          import re,os
+          v=re.search(r'const APP_VERSION="(\d+)\.(\d+)\.(\d+)"',open('index.html').read())
+          assert v, "APP_VERSION missing"
+          M,m,p=map(int,v.groups()); name=f"{M}.{m}.{p}"; code=M*1000000+m*1000+p+1000
+          g='android/app/build.gradle'; s=open(g).read()
+          s=re.sub(r'versionCode\s+\d+',f'versionCode {code}',s,1); s=re.sub(r'versionName\s+"[^"]*"',f'versionName "{name}"',s,1)
+          open(g,'w').write(s); open(os.environ['GITHUB_ENV'],'a').write(f"APP_VERSION={name}\n"); print(name,code)
+          PY
       - name: Build APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
       - name: Publish test APK
@@ -100,4 +111,4 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk bujjet-test.apk
           gh release delete android-test --yes --cleanup-tag || true
-          gh release create android-test bujjet-test.apk --title "bujjet Android test build" --notes "Test build from ${GITHUB_SHA::7}. Install on Android to try automatic transaction detection." --prerelease
+          gh release create android-test bujjet-test.apk --title "bujjet ${APP_VERSION} (Android test build)" --notes "Version ${APP_VERSION}, test build from ${GITHUB_SHA::7}. Install on Android to try automatic transaction detection." --prerelease
