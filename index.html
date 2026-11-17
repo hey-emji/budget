@@ -543,7 +543,7 @@ const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capa
 const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
 // App version (major.minor.patch). Bump patch for small fixes, minor for bigger changes while testing, major only for a published release.
-const APP_VERSION="0.5.0";
+const APP_VERSION="0.5.1";
 const LN=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   return reg?reg("LocalNotifications"):((C&&C.Plugins&&C.Plugins.LocalNotifications)||null); }catch(e){ return null; } })();
 const GA=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
@@ -1309,7 +1309,7 @@ async function scheduleReminders(){ if(!LN||!config) return; const r=remGet();
     const pend=await LN.getPending(); const mine=(pend.notifications||[]).filter(n=>n.id>=1000&&n.id<4000).map(n=>({id:n.id})); if(mine.length) await LN.cancel({notifications:mine});
     if(plan.length) await LN.schedule({notifications:plan.map(n=>({id:n.id,title:n.title,body:n.body,extra:n.extra,smallIcon:"ic_tile",
       schedule:n.on?{on:n.on,allowWhileIdle:true}:{at:n.at,allowWhileIdle:true}}))});
-    remSig=sig; }catch(e){ console.log("reminders",e); } }
+    remSig=sig; window._remErr=""; }catch(e){ window._remErr=String(e&&e.message||e); console.log("reminders",e); } remStatus(); }
 function renderReminders(){ const box=$("remBody"); if(!box) return; const r=remGet(); box.textContent="";
   if(!NATIVE){ box.innerHTML='<div class="small muted">Reminders work in the bujjet Android app. Set them there under Settings → Reminders.</div>'; return; }
   const sel=(label,key,opts)=>{const l=document.createElement("label");l.className="f";l.innerHTML=`<span class="small muted"></span><select></select>`;l.firstChild.textContent=label;
@@ -1325,15 +1325,26 @@ function renderReminders(){ const box=$("remBody"); if(!box) return; const r=rem
   if(r.due) box.appendChild(tim("Payment reminder time","dueT"));
   const st=document.createElement("div"); st.className="small muted"; st.id="remStatus"; box.appendChild(st);
   const tb=document.createElement("button"); tb.type="button"; tb.className="secondary"; tb.textContent="Send a test reminder";
-  tb.onclick=async()=>{ if(!(await remAsk())) return; try{ await LN.schedule({notifications:[{id:3999,title:"bujjet reminders are on",body:"This is how your reminders will look.",smallIcon:"ic_tile",schedule:{at:new Date(Date.now()+3000)},extra:{go:"log"}}]}); toast("Test reminder in 3 seconds"); }catch(e){ toast("Couldn't send a test reminder"); } };
-  box.appendChild(tb); remStatus();
+  tb.onclick=async()=>{ if(!(await remAsk())) return; window._remErr=""; try{ await LN.schedule({notifications:[{id:3999,title:"bujjet reminders are on",body:"This is how your reminders will look.",smallIcon:"ic_tile",schedule:{at:new Date(Date.now()+3000)},extra:{go:"log"}}]}); toast("Test reminder in 3 seconds"); }catch(e){ window._remErr=String(e&&e.message||e); toast("Couldn't send a test reminder: "+window._remErr); remStatus(); } };
+  box.appendChild(tb);
+  const ex=document.createElement("button"); ex.type="button"; ex.className="secondary"; ex.id="remExact"; ex.hidden=true; ex.textContent="Allow reminders on time (exact alarms)";
+  ex.onclick=async()=>{ try{ await LN.changeExactNotificationSetting(); }catch(e){ toast("Open Android settings → Apps → bujjet → Alarms & reminders"); } }; box.appendChild(ex);
+  remSig=""; scheduleReminders();
   async function save(k,v){ const n={...remGet(),[k]:v}; remSet(n); if(n.freq!=="off"||n.due) await remAsk(); remSig=""; renderReminders(); scheduleReminders(); }
 }
 async function remAsk(){ try{ let p=await LN.checkPermissions(); if(p.display!=="granted") p=await LN.requestPermissions(); remStatus(); if(p.display!=="granted"){ toast("Allow notifications for bujjet in Android settings"); return false; } return true; }catch(e){ return false; } }
 async function remStatus(){ const el=$("remStatus"); if(!el||!LN) return; const r=remGet(); if(r.freq==="off"&&!r.due){ el.textContent="Reminders are off."; return; }
   try{ const p=await LN.checkPermissions(); let t=p.display==="granted"?"":"Notifications are blocked for bujjet. Allow them in Android settings. ";
     try{ const e=await LN.checkExactNotificationSetting(); if(e&&e.exact_alarm!=="granted") t+="Reminders may arrive a few minutes late (exact alarms are off for bujjet)."; }catch(_){}
-    el.textContent=t||"On. Xiaomi phones: keep bujjet's battery setting on No restrictions so reminders aren't blocked."; }catch(e){ el.textContent=""; } }
+    let pend=[]; try{ pend=((await LN.getPending()).notifications||[]).filter(n=>n.id>=1000&&n.id<3999); }catch(_){}
+    const nxt=pend.map(n=>remNext(n)).filter(Boolean).sort((a,b)=>a-b)[0];
+    t+=pend.length?`${pend.length} reminder${pend.length===1?"":"s"} scheduled`+(nxt?` · next ${dName(nxt)}, ${nxt.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"})}`:"")+". ":"Nothing is scheduled yet. Open this screen again after allowing notifications. ";
+    if(window._remErr) t+="Error: "+window._remErr+". ";
+    el.textContent=t+"Xiaomi: turn on Autostart and set Battery saver to No restrictions for bujjet, or reminders can be blocked.";
+    const fx=$("remExact"); if(fx) fx.hidden=!(await LN.checkExactNotificationSetting().then(e=>e&&e.exact_alarm!=="granted").catch(()=>false)); }catch(e){ el.textContent="Couldn't check reminders: "+(e&&e.message||e); } }
+// When a pending reminder will next fire (dated ones have "at"; repeating ones have "on").
+function remNext(n){ const sc=n.schedule||{}; if(sc.at) return new Date(sc.at); const o=sc.on; if(!o) return null; const t=new Date(), d=new Date(t.getFullYear(),t.getMonth(),t.getDate(),o.hour||0,o.minute||0);
+  for(let i=0;i<8;i++){ const x=new Date(d.getTime()+i*864e5); if(x>t&&(!o.weekday||x.getDay()+1===o.weekday)) return x; } return null; }
 /*PARSER-START*/
 /* ---------- message + receipt reading (all on this phone) ---------- */
 const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank|\bmcc\b/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank|maricard/i],["SeaBank",/sea ?bank/i],

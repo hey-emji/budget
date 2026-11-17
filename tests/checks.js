@@ -102,3 +102,6 @@ await test("reminders: payments due get a day-before and on-the-day reminder; pa
 await test("Settings shows Reminders (web explains it's in the app)", async()=>{ openPrefs(); await wait(50); ok($("remBody").textContent.includes("Android app"),$("remBody").textContent); closePrefs(); await wait(30); });
 
 await test("app version is major.minor.patch and shown in Settings → About", async()=>{ ok(/^\d+\.\d+\.\d+$/.test(APP_VERSION),APP_VERSION); ok($("appVer").textContent.includes(APP_VERSION),"about"); });
+
+await test("reminders: next fire time for repeating and dated reminders", async()=>{ const n=remNext({schedule:{on:{hour:23,minute:59}}}); ok(n&&n.getHours()===23,"daily"); const w=remNext({schedule:{on:{weekday:2,hour:8,minute:0}}}); eq(w.getDay(),1,"Monday");
+  eq(remNext({schedule:{at:"2026-11-20T01:00:00.000Z"}}).toISOString(),"2026-11-20T01:00:00.000Z"); });
