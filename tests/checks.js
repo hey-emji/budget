@@ -105,3 +105,25 @@ await test("app version is major.minor.patch and shown in Settings → About", a
 
 await test("reminders: next fire time for repeating and dated reminders", async()=>{ const n=remNext({schedule:{on:{hour:23,minute:59}}}); ok(n&&n.getHours()===23,"daily"); const w=remNext({schedule:{on:{weekday:2,hour:8,minute:0}}}); eq(w.getDay(),1,"Monday");
   eq(remNext({schedule:{at:"2026-11-20T01:00:00.000Z"}}).toISOString(),"2026-11-20T01:00:00.000Z"); });
+
+// ---- Card statements & paid-ahead installments (0.6.0)
+const debtRow=name=>[...$("debtList").querySelectorAll(".debt")].find(e=>e.querySelector("strong").textContent===name);
+await test("Loans list doesn't count installments already paid (Metrobank paid through Nov)", async()=>{ render(); await wait(30);
+  const r=debtRow("Cash to Go 3"); ok(r.textContent.includes("Payment 8 of 9"),r.textContent); ok(r.textContent.includes("2 payments left"),r.textContent);
+  const m=debtRow("MacBook"); ok(m.textContent.includes("Last payment"),"Unionbank Nov not paid: "+m.textContent); });
+await test("Statement in credit: billed month paid, credit goes to next month, older charges not owed again", async()=>{
+  const p=applyStatement("Metrobank",{date:"2026-11-12",due:"2026-12-03",total:-5000});
+  eq(p.paidCards.Metrobank,"2026-12"); near(sum(p.credits.filter(c=>c.lender==="Metrobank"),c=>c.amount),5000); ok(p.credits.filter(c=>c.lender==="Metrobank").every(c=>c.month==="2026-12"),"credit in Dec");
+  await call("setConfig",{patch:p}); render(); await wait(30);
+  eq(firstUnpaid("Metrobank",config.paidCards,config.credits),"2026-12"); eq(ymd(instDue("Metrobank","2026-12")),"2027-01-03");
+  const row=[...document.querySelectorAll("#ccList .item.inst")].find(x=>x.textContent.includes("Metrobank")); ok(row.textContent.includes("nothing due Dec 3"),row.textContent);
+  ok(row.querySelector(".stmtbtn").textContent==="Update statement","button");
+  const inst=sum(config.debts.filter(d=>d.lender==="Metrobank"&&debtActive(d,"2026-12")),d=>d.monthly); near(monthDue("Metrobank","2026-12",config.credits),inst-5000); });
+await test("Statement with an amount due: other charges due on the statement's own due date", async()=>{
+  const raw=sum(config.debts.filter(d=>d.lender==="Metrobank"&&debtActive(d,"2026-11")),d=>d.monthly);
+  await call("setConfig",{patch:applyStatement("Metrobank",{date:"2026-11-12",due:"2026-12-04",total:raw+650})}); render(); await wait(30);
+  eq(config.paidCards.Metrobank,"2026-11"); near(otherOwed("Metrobank"),650,0.01+subCharges("Metrobank")+cardBuys("Metrobank")); eq(ymd(instDue("Metrobank","2026-11")),"2026-12-04"); eq(ymd(nextCardDue("Metrobank")),"2026-12-04");
+  const r=debtRow("Cash to Go 3"); ok(r.textContent.includes("Payment 7 of 9"),"unpaid again: "+r.textContent); });
+await test("Enter statement dialog saves from the Accounts card", async()=>{ const row=[...document.querySelectorAll("#ccList .item.inst")].find(x=>x.textContent.includes("Metrobank"));
+  row.querySelector(".stmtbtn").click(); await wait(30); const f=$("upAll").querySelector("form"); ok(f,"form"); f.date.value="2026-11-12"; f.due.value="2026-12-03"; f.total.value="-13,473.74"; f.requestSubmit(); await wait(300);
+  near(config.stmts.Metrobank.total,-13473.74); eq(config.stmts.Metrobank.due,"2026-12-03"); ok($("upDlg").hidden,"closed"); });

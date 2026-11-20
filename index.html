@@ -120,7 +120,7 @@ nav .tab[aria-current="page"] svg{stroke:var(--accent)}
 .pernav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 20px var(--body);cursor:pointer}
 .pernav button:disabled{opacity:.35;cursor:default}
 .tap{cursor:pointer}
-#todayHero{cursor:pointer}.linkbtn{display:block;text-align:left;background:none;border:0;padding:3px 0;margin:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:0}.subchips{margin-top:6px}.chip.sub{font-size:.85em;padding:5px 10px}#heroLabel::after{content:"  ›";opacity:.7}
+#todayHero{cursor:pointer}.linkbtn{display:block;text-align:left;background:none;border:0;padding:3px 0;margin:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:0}.subchips{margin-top:6px}.stmtbtn{margin-top:8px;min-height:36px;padding:6px 12px;font-size:14px;justify-self:start}.chip.sub{font-size:.85em;padding:5px 10px}#heroLabel::after{content:"  ›";opacity:.7}
 .insheet{max-height:90vh;overflow-y:auto;overscroll-behavior:contain}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.45;justify-self:center;margin:2px 0;box-shadow:0 0 0 14px transparent}
 .insum{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}.insum .r{text-align:right}
@@ -543,7 +543,7 @@ const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capa
 const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
 // App version (major.minor.patch). Bump patch for small fixes, minor for bigger changes while testing, major only for a published release.
-const APP_VERSION="0.5.1";
+const APP_VERSION="0.6.0";
 const LN=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   return reg?reg("LocalNotifications"):((C&&C.Plugins&&C.Plugins.LocalNotifications)||null); }catch(e){ return null; } })();
 const GA=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
@@ -581,10 +581,30 @@ function firstUnpaid(L,paid,credits){const dd=(config.debts.find(d=>d.lender===L
   for(let i=0;i<40;i++){ if((paid[L]||"")>=mAdd(mm,1)||(hasDebts(L,mm)&&monthDue(L,mm,credits)<=0.01)){mm=mAdd(mm,1);continue} break } return mm}
 const lcard=L=>(config.cards||[]).find(c=>c.lender===L);
 function subCharges(L){const c=lcard(L); if(!c) return 0; const cur=mkey(new Date()); let t=0;
-  (config.subs||[]).filter(s=>s.card===c.id&&/^\d{4}-\d{2}$/.test(s.from||"")).forEach(s=>{for(let m=s.from,i=0;m<=cur&&i<120;m=mAdd(m,1),i++) t+=Number(s.amount)||0;}); return t;}
-function cardBuys(L){const c=lcard(L); if(!c||!c.otherFrom) return 0; return sum(expenses.filter(e=>e.acct===c.id&&String(e.date)>=c.otherFrom&&!isInc(e)&&e.cat!=="credit"&&e.cat!=="transfer"),e=>e.amount)}
-function nextCardDue(L){const dd=(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1, t=new Date(), d=new Date(t.getFullYear(),t.getMonth(),dd); return ymd(d)>=ymd(t)?d:new Date(t.getFullYear(),t.getMonth()+1,dd)}
-function otherOwed(L,ex){return Math.max(0,Math.round((subCharges(L)+cardBuys(L)-sum((config.otherPays||[]).filter(p=>p.L===L&&p.src!==ex),p=>p.amount))*100)/100)}
+  const st=lenderStmt(L);
+  (config.subs||[]).filter(s=>s.card===c.id&&/^\d{4}-\d{2}$/.test(s.from||"")).forEach(s=>{for(let m=s.from,i=0;m<=cur&&i<120;m=mAdd(m,1),i++) if(!st||ymd(subChargeDate(s,m))>st.date) t+=Number(s.amount)||0;}); return t;}
+function cardBuys(L){const c=lcard(L), st=lenderStmt(L); if(!c||(!c.otherFrom&&!st)) return 0; return sum(expenses.filter(e=>e.acct===c.id&&String(e.date)>=(c.otherFrom||"")&&(!st||String(e.date)>st.date)&&!isInc(e)&&e.cat!=="credit"&&e.cat!=="transfer"),e=>e.amount)}
+// Latest statement entered for an installment card: {date, due, total, other}. "other" = non-installment part still owed from it.
+const lenderStmt=L=>(config.stmts||{})[L]||null;
+const stmtMonth=st=>mAdd(st.due.slice(0,7),-1);   // installment month the statement billed (due the month after)
+const dueDayOf=L=>(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1;
+function instDue(L,mm){ const st=lenderStmt(L); if(st&&stmtMonth(st)===mm) return new Date(st.due+"T00:00"); const [y,mo]=mAdd(mm,1).split("-").map(Number); return new Date(y,mo-1,dueDayOf(L)); }
+function stmtOtherLeft(L,ex){ const st=lenderStmt(L); if(!st) return 0; return Math.max(0,(st.other||0)-sum((config.otherPays||[]).filter(p=>p.L===L&&p.src!==ex),p=>p.amount)); }
+function nextCardDue(L){ const st=lenderStmt(L), t=new Date();
+  if(st){ if(stmtOtherLeft(L)>0.009) return new Date(st.due+"T00:00"); const [y,mo]=mAdd(st.due.slice(0,7),1).split("-").map(Number), d=new Date(y,mo-1,Math.min(Number(st.due.slice(8,10)),lastDay(y,mo-1))); if(ymd(d)>=ymd(t)) return d; }
+  return nextCardDueDay(L); }
+// Enter a statement: everything charged up to its date is settled into its Total Amount Due.
+function applyStatement(L,st){ const mm=stmtMonth(st), paid={...(config.paidCards||{})}, raw=sum(config.debts.filter(d=>d.lender===L&&debtActive(d,mm)),d=>d.monthly);
+  let credits=(config.credits||[]).filter(c=>!(c.lender===L&&c.month>=mm)), other=0, total=Math.round(Number(st.total)*100)/100, src="stmt:"+L+":"+st.date;
+  if(total<=0.009){ paid[L]=mAdd(mm,1); let left=-total, m=mAdd(mm,1);
+    for(let i=0;i<60&&left>0.009&&hasDebts(L,m);i++,m=mAdd(m,1)){ const due=monthDue(L,m,credits); if(due<=0.01) continue; const c=Math.min(left,due);
+      credits.push({label:"Statement credit "+dName(new Date(st.date+"T00:00")),lender:L,amount:Math.round(c*100)/100,month:m,src}); left-=c; }
+    other=-Math.round(left*100)/100; }
+  else { paid[L]=mm; other=Math.round((total-raw)*100)/100;
+    if(other<0){ credits.push({label:"Statement credit "+dName(new Date(st.date+"T00:00")),lender:L,amount:-other,month:mm,src}); other=0; } }
+  return {stmts:{...(config.stmts||{}),[L]:{date:st.date,due:st.due,total,other:Math.max(0,other),credit:Math.max(0,-other)}},credits,paidCards:paid,otherPays:(config.otherPays||[]).filter(p=>p.L!==L),payUndo:Object.fromEntries(Object.entries(config.payUndo||{}).filter(([k,v])=>v.L!==L))}; }
+function nextCardDueDay(L){const dd=(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1, t=new Date(), d=new Date(t.getFullYear(),t.getMonth(),dd); return ymd(d)>=ymd(t)?d:new Date(t.getFullYear(),t.getMonth()+1,dd)}
+function otherOwed(L,ex){const st=lenderStmt(L); return Math.max(0,Math.round(((st?(st.other||0)-(st.credit||0):0)+subCharges(L)+cardBuys(L)-sum((config.otherPays||[]).filter(p=>p.L===L&&p.src!==ex),p=>p.amount))*100)/100)}
 function applyInstallmentPayment(L,amt,src){
   const credits=[...(config.credits||[])], paid={...(config.paidCards||{})}, prev=paid[L]||"";
   const otherPays=(config.otherPays||[]).filter(p=>p.src!==src), o=Math.min(amt,otherOwed(L,src)); if(o>0.009) otherPays.push({L,amount:Math.round(o*100)/100,src});
@@ -785,7 +805,7 @@ function render(){
     const mm=firstUnpaid(L,paidCards,config.credits||[]), dm=mAdd(mm,1);
     const ds=config.debts.filter(d=>d.lender===L&&debtActive(d,mm)), oth=otherOwed(L); if(!ds.length&&oth<=0.009) return;
     const credit=ds.length?sum((config.credits||[]).filter(c=>c.month===mm&&c.lender===L),c=>c.amount):0, amt=Math.max(0,sum(ds,d=>d.monthly)-credit)+oth;
-    const [dy,dmo]=dm.split("-").map(Number), date=new Date(dy,dmo-1,(config.debts.find(d=>d.lender===L)||lcard(L)||{}).dueDay||1);
+    const date=instDue(L,mm);
     const nd=nextCardDue(L), cname=/card$/i.test(L)?L:L+" card";
     if(oth>0.009&&ds.length&&ymd(date)>ymd(nd)){
       ups.push({date:nd,amt:oth,from:mainAcc().id,make:()=>mkRow(cname,"Due "+dName(nd)+" · subscriptions and purchases (installments already paid)",oth,
@@ -990,12 +1010,16 @@ function renderAccounts(){
       -sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
     instTotal+=Math.max(0,oth); // installments themselves are counted under Loans & installments
     const mm=firstUnpaid(L,config.paidCards||{},config.credits||[]), due=Math.max(0,ds.length?monthDue(L,mm,config.credits||[]):0)+oth, dm=mAdd(mm,1), [dy,dmo]=dm.split("-").map(Number);
-    const dd=new Date(dy,dmo-1,(ds[0]||{}).dueDay||1), cred=sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
+    const dd=instDue(L,mm), cred=sum((config.credits||[]).filter(c=>c.lender===L&&c.month>=m),c=>c.amount);
     const r=document.createElement("div");r.className="item inst";r.innerHTML='<div class="t"><strong></strong><span class="small muted"></span><span class="tags"><span class="tag">Installments</span></span></div><strong></strong>';
     r.querySelector("strong").textContent=card?card.name:(/card$/i.test(L)?L:L+" card");
     const nd=nextCardDue(L), split=oth>0.009&&ds.length&&ymd(dd)>ymd(nd);
     r.querySelector(".t .small").textContent=split?`${peso(oth)} subscriptions and purchases due ${dName(nd)} · next installments ${peso(due-oth)} ${dName(dd)}`+(cred?` · ${peso(cred)} credit`:""):`Next ${peso(due)} due ${dName(dd)} · ${ds.length} installment${ds.length===1?"":"s"}`+(oth>0.009?` + ${peso(oth)} subscriptions and purchases`:"")+(cred?` · ${peso(cred)} credit`:"");
     r.querySelector(".t .small").textContent=(oth>0.009?`${peso(oth)} subscriptions and purchases due ${dName(nd)}. `:"No other charges. ")+`Its ${ds.length} installment${ds.length===1?"":"s"} (next ${peso(Math.max(0,due-oth))} due ${dName(dd)}) are under Loans & installments.`;
+    const st=lenderStmt(L), sl=document.createElement("span"); sl.className="small muted stmtline"; sl.style.display="block";
+    sl.textContent=st?`Statement ${dName(new Date(st.date+"T00:00"))}: `+(st.total<=0?`nothing due ${dName(new Date(st.due+"T00:00"))} (${peso2(-st.total)} credit)`:`${peso2(st.total)} due ${dName(new Date(st.due+"T00:00"))}`):"Enter your latest statement so the next bill and installments match your bank.";
+    const sb=document.createElement("button"); sb.type="button"; sb.className="secondary stmtbtn"; sb.textContent=st?"Update statement":"Enter statement"; sb.onclick=()=>openStmt(L,card?card.name:L);
+    r.querySelector(".t").append(sl,sb);
     r.lastChild.textContent=peso2(Math.max(0,oth)); cl.appendChild(r)});
   const nCards=cards.length+cl.querySelectorAll(".item.inst").length;
   $("sumCC").textContent=`${nCards} card${nCards===1?"":"s"} · owed in total`; $("sumCCAmt").textContent=peso2(sum(cards,c=>c.owed)+instTotal);
@@ -1032,8 +1056,9 @@ function renderDebts(){ initGroups();
   const box=$("debtList"); box.textContent="";
   [...config.debts].sort((a,b)=>debtEnd(a)<debtEnd(b)?-1:1).forEach(d=>{
     const end=debtEnd(d); if(end>last) last=end;
-    const n=Math.min(d.total, d.current+Math.max(0,mDiff(config.startMonth,m)));
-    const done=m>end, leftN=done?0:d.total-n+1, bal=leftN*d.monthly; total+=bal;
+    const P=firstUnpaid(d.lender,config.paidCards||{},config.credits||[]), ahead=Math.max(0,mDiff(m,P));   // months already paid ahead
+    const n=Math.min(d.total, d.current+Math.max(0,mDiff(config.startMonth,m))+ahead);
+    const done=m>end||mAdd(m,ahead)>end, leftN=done?0:d.total-n+1, bal=leftN*d.monthly; total+=bal;
     const el=document.createElement("div"); el.className="debt";
     el.innerHTML=`<div class="row"><strong></strong><span class="pill ${done?"good":leftN<=2?"warn":"info"}"></span></div><div class="bar ${done?"good":""}"><span style="width:${(done?100:(n-1)/d.total*100).toFixed(1)}%"></span></div><div class="row small muted"><span></span><span></span></div>`;
     el.querySelector("strong").textContent=d.name;
@@ -1043,7 +1068,7 @@ function renderDebts(){ initGroups();
     s[1].textContent=done?"":`Ends ${mName(end)}`;
     box.appendChild(el);
   });
-  const prepaid=sum((config.credits||[]).filter(c=>c.month>=m&&config.debts.some(d=>d.lender===c.lender)),c=>c.amount);
+  const prepaid=sum((config.credits||[]).filter(c=>config.debts.some(d=>d.lender===c.lender)&&c.month>=firstUnpaid(c.lender,config.paidCards||{},config.credits||[])),c=>c.amount);
   total=Math.max(0,total-prepaid);
   $("debtTotal").textContent=peso2(total);
   $("debtFree").textContent=`Left to pay in total. Installment-free after ${mName(last,true)} · ${peso2(instMonth(m))} due this month.`;
@@ -1212,6 +1237,20 @@ function openReserved(){ const l=$("upAll"); l.textContent=""; const r=window._r
   const n=document.createElement("div"); n.className="small muted"; n.style.margin="0 0 8px";
   n.textContent=`Due before your next payday and paid from ${window._spendNames}. bujjet keeps this out of Money left to spend until you pay it. Card-paid items aren't here; they're in the card's bill.`; l.appendChild(n);
   r.forEach(u=>l.appendChild(u.make())); $("upTitle").textContent="Set aside before payday"; $("upBack").hidden=false; $("upDlg").hidden=false; }
+function openStmt(L,name){ const st=lenderStmt(L)||{}, t=new Date(), sd=st.date||ymd(new Date(t.getFullYear(),t.getMonth(),Math.min(12,t.getDate())));
+  const guessDue=d=>{const x=new Date(d+"T00:00"), y=new Date(x.getFullYear(),x.getMonth()+1,dueDayOf(L)); return ymd(y);};
+  const b=$("upAll"); b.textContent=""; $("upTitle").textContent=name+" statement"; $("upBack").hidden=false; $("upDlg").hidden=false;
+  const f=document.createElement("form"); f.className="remgrid"; f.innerHTML=`<div class="small muted">Copy these from your statement. bujjet treats everything charged up to the statement date as part of it, and the installments it billed as paid once it's settled.</div>
+   <label class="f"><span class="small muted">Statement date</span><input type="date" name="date" required></label>
+   <label class="f"><span class="small muted">Payment due date</span><input type="date" name="due" required></label>
+   <label class="f"><span class="small muted">Total Amount Due (use a minus sign if it's in credit, e.g. -13,473.74)</span><input name="total" inputmode="decimal" required placeholder="0.00"></label>
+   <button class="primary" type="submit">Save statement</button>`;
+  f.date.value=sd; f.due.value=st.due||guessDue(sd); f.total.value=st.total!=null?String(st.total):""; let dueTouched=!!st.due;
+  f.due.oninput=()=>dueTouched=true; f.date.onchange=()=>{ if(!dueTouched&&f.date.value) f.due.value=guessDue(f.date.value); };
+  f.onsubmit=async ev=>{ ev.preventDefault(); const v=parseFloat(String(f.total.value).replace(/[,\s₱]/g,"").replace(/^−/,"-")); if(!isFinite(v)){toast("Enter the Total Amount Due");return}
+    if(!f.date.value||!f.due.value||f.due.value<=f.date.value){toast("The due date should be after the statement date");return}
+    try{ await call("setConfig",{patch:applyStatement(L,{date:f.date.value,due:f.due.value,total:v})}); closeUpcoming(); toast("Statement saved"); }catch(e){toast("Couldn't save. Try again.")} };
+  b.appendChild(f); }
 function closeUpcoming(){$("upTitle").textContent="All upcoming payments";$("upDlg").hidden=true;$("upBack").hidden=true}
 function askCloseSheet(){ if(($("amt").value||"").trim()&&!(ctx&&ctx.kind==="edit")) confirmBox("Discard this entry?","You haven't saved it yet.",{yes:"Discard",no:"Keep editing"}).then(ok=>{if(ok)closeSheet()}); else closeSheet(); }
 function closeSheet(){if(ctx){ctx=null;$("amt").value="";$("note").value="";}$("backdrop").hidden=true;$("addForm").hidden=true;$("amt").blur()}
@@ -1340,7 +1379,7 @@ async function remStatus(){ const el=$("remStatus"); if(!el||!LN) return; const 
     const nxt=pend.map(n=>remNext(n)).filter(Boolean).sort((a,b)=>a-b)[0];
     t+=pend.length?`${pend.length} reminder${pend.length===1?"":"s"} scheduled`+(nxt?` · next ${dName(nxt)}, ${nxt.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"})}`:"")+". ":"Nothing is scheduled yet. Open this screen again after allowing notifications. ";
     if(window._remErr) t+="Error: "+window._remErr+". ";
-    el.textContent=t+"Xiaomi: turn on Autostart and set Battery saver to No restrictions for bujjet, or reminders can be blocked.";
+    el.textContent=t+"Xiaomi: turn on Background autostart and set Battery saver to No restrictions for bujjet, or reminders can be blocked.";
     const fx=$("remExact"); if(fx) fx.hidden=!(await LN.checkExactNotificationSetting().then(e=>e&&e.exact_alarm!=="granted").catch(()=>false)); }catch(e){ el.textContent="Couldn't check reminders: "+(e&&e.message||e); } }
 // When a pending reminder will next fire (dated ones have "at"; repeating ones have "on").
 function remNext(n){ const sc=n.schedule||{}; if(sc.at) return new Date(sc.at); const o=sc.on; if(!o) return null; const t=new Date(), d=new Date(t.getFullYear(),t.getMonth(),t.getDate(),o.hour||0,o.minute||0);
