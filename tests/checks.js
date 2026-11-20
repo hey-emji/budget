@@ -127,3 +127,19 @@ await test("Statement with an amount due: other charges due on the statement's o
 await test("Enter statement dialog saves from the Accounts card", async()=>{ const row=[...document.querySelectorAll("#ccList .item.inst")].find(x=>x.textContent.includes("Metrobank"));
   row.querySelector(".stmtbtn").click(); await wait(30); const f=$("upAll").querySelector("form"); ok(f,"form"); f.date.value="2026-11-12"; f.due.value="2026-12-03"; f.total.value="-13,473.74"; f.requestSubmit(); await wait(300);
   near(config.stmts.Metrobank.total,-13473.74); eq(config.stmts.Metrobank.due,"2026-12-03"); ok($("upDlg").hidden,"closed"); });
+
+// ---- Detection: offers filtered, AI check for unclear ones (0.7.0)
+await test("rules skip loan/credit offers like 'Get up to ₱50,000' but keep real money-in", async()=>{
+  eq(parseMessage("Maya. Get up to ₱50,000 with Maya Easy Credit. Apply now!"),null);
+  eq(parseMessage("Maya. You're pre-approved for a cash loan of ₱50,000.00"),null);
+  const r=parseMessage("Maya. You have received ₱50,000.00 from JUAN DELA CRUZ. Ref no. 123456789012"); ok(r&&r.type==="income"&&r.clear,"real money in");
+  const p=parseMessage("GCash. You have paid P250.00 to MERALCO. Ref. No. 9012345678"); ok(p&&p.clear,"clear payment"); });
+await test("unclear notifications go to the AI check; 'no' drops it, 'yes' keeps it, no AI marks it unsure", async()=>{
+  const m=parseMessage("ShopeePay. Order ₱1,250.00 paid for your Shopee order"); ok(m,"parsed");
+  if(m.clear){ ok(true); return; }
+  window.__aiMock=()=>false; eq((await screenReading({...m},"x")).keep,false);
+  window.__aiMock=()=>true; const k={...m}; eq((await screenReading(k,"x")).keep,true); eq(k.ai,"test");
+  window.__aiMock=()=>null; const u={...m}; eq((await screenReading(u,"x")).keep,true); eq(u.unsure,true); delete window.__aiMock;
+  const c=parseMessage("GCash. You have paid P250.00 to MERALCO. Ref. No. 9012345678"); eq((await screenReading(c,"x")).by,"rules"); });
+await test("Settings shows the AI check card (web explains it's in the app)", async()=>{ openPrefs(); await wait(50); ok($("aiBody").textContent.includes("Android app"),$("aiBody").textContent); closePrefs(); await wait(30); });
+await test("AI answers are read as yes/no", async()=>{ eq(aiYesNo("YES"),true); eq(aiYesNo("No."),false); eq(aiYesNo("maybe"),null); ok(aiPrompt("hi").includes("loan or credit offers"),"prompt"); });

@@ -91,7 +91,10 @@ jobs:
               }
               buildTypes { debug { signingConfig signingConfigs.testKey } }
           }
-          dependencies { implementation 'com.google.android.gms:play-services-auth:21.3.0' }
+          dependencies {
+              implementation 'com.google.android.gms:play-services-auth:21.3.0'
+              implementation 'com.google.mlkit:genai-prompt:1.0.0-beta4'
+          }
           GR
       - name: Set app version (from APP_VERSION in index.html)
         run: |
@@ -102,7 +105,9 @@ jobs:
           M,m,p=map(int,v.groups()); name=f"{M}.{m}.{p}"; code=M*1000000+m*1000+p+1000
           g='android/app/build.gradle'; s=open(g).read()
           s=re.sub(r'versionCode\s+\d+',f'versionCode {code}',s,1); s=re.sub(r'versionName\s+"[^"]*"',f'versionName "{name}"',s,1)
-          open(g,'w').write(s); open(os.environ['GITHUB_ENV'],'a').write(f"APP_VERSION={name}\n"); print(name,code)
+          open(g,'w').write(s)
+          vg='android/variables.gradle'; t=open(vg).read(); t=re.sub(r'minSdkVersion\s*=\s*\d+','minSdkVersion = 26',t); open(vg,'w').write(t)  # Gemini Nano (ML Kit GenAI) needs Android 8+
+          open(os.environ['GITHUB_ENV'],'a').write(f"APP_VERSION={name}\n"); print(name,code)
           PY
       - name: Build APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon

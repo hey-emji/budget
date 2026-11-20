@@ -424,6 +424,7 @@ button.done::after{content:"✓";position:absolute;inset:0;display:grid;place-it
         <label class="fxrow small"><span>Sounds and vibration on taps and saves</span><input type="checkbox" id="fxToggle"></label>
       </div>
       <div class="card" id="remCard"><h2>Reminders</h2><div id="remBody" class="remgrid"></div></div>
+      <div class="card" id="aiCard"><h2>AI check for detected transactions</h2><div id="aiBody" class="remgrid"></div></div>
     <div class="card" id="dataCard">
       <div class="row"><h2>Backup & data</h2><span class="pill good" id="localPill">On this phone</span></div>
       <div class="small muted" id="backupInfo"></div>
@@ -543,7 +544,7 @@ const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capa
 const NR=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   if(reg) return reg("NotifReader"); return (C&&C.Plugins&&C.Plugins.NotifReader)||null; }catch(e){ return (window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NotifReader)||null; } })();
 // App version (major.minor.patch). Bump patch for small fixes, minor for bigger changes while testing, major only for a published release.
-const APP_VERSION="0.6.0";
+const APP_VERSION="0.7.0";
 const LN=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
   return reg?reg("LocalNotifications"):((C&&C.Plugins&&C.Plugins.LocalNotifications)||null); }catch(e){ return null; } })();
 const GA=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin);
@@ -1384,6 +1385,46 @@ async function remStatus(){ const el=$("remStatus"); if(!el||!LN) return; const 
 // When a pending reminder will next fire (dated ones have "at"; repeating ones have "on").
 function remNext(n){ const sc=n.schedule||{}; if(sc.at) return new Date(sc.at); const o=sc.on; if(!o) return null; const t=new Date(), d=new Date(t.getFullYear(),t.getMonth(),t.getDate(),o.hour||0,o.minute||0);
   for(let i=0;i<8;i++){ const x=new Date(d.getTime()+i*864e5); if(x>t&&(!o.weekday||x.getDay()+1===o.weekday)) return x; } return null; }
+// ---- AI check for detected notifications. Rules first; only unclear ones go to AI (on this phone if it has Gemini Nano, else Claude if you turned it on).
+const NANO=(()=>{ if(!NATIVE) return null; try{ const C=window.Capacitor, reg=(window.capacitorExports&&window.capacitorExports.registerPlugin)||(C&&C.registerPlugin); return reg?reg("Nano"):null; }catch(e){ return null; } })();
+const AI_MODEL="claude-haiku-5-5", AI_DAILY=30;
+function aiGet(){ try{ return {cloud:false,key:"",...JSON.parse(localStorage.getItem("bujjet.ai")||"{}")}; }catch(e){ return {cloud:false,key:""}; } }
+function aiSet(a){ try{ localStorage.setItem("bujjet.ai",JSON.stringify(a)); }catch(e){} }
+function aiPrompt(text){ return "Is this phone notification about money that actually moved: a completed payment, purchase, transfer, cash-in, withdrawal, or money received? Promotions, loan or credit offers, credit limits, reminders, bills not yet paid, and one-time PINs are NOT. Reply with one word: YES or NO.\n\nNotification: "+String(text).slice(0,500); }
+const aiYesNo=t=>/\byes\b/i.test(t||"")?true:/\bno\b/i.test(t||"")?false:null;
+let nanoState=null;
+async function nanoStatus(){ if(!NANO) return "none"; try{ const r=await NANO.status(); nanoState=r.status; return r.status; }catch(e){ nanoState="error"; return "error"; } }
+async function askNano(text){ if(!NANO) return null; if(nanoState==null) await nanoStatus(); if(nanoState!=="available") return null; try{ const r=await NANO.ask({prompt:aiPrompt(text)}); return aiYesNo(r.text); }catch(e){ return null; } }
+function aiQuota(){ const d=ymd(new Date()); let q={d,n:0}; try{ q=JSON.parse(localStorage.getItem("bujjet.aiCount")||"null")||q; }catch(e){} if(q.d!==d) q={d,n:0}; return q; }
+async function askClaude(text,force){ const a=aiGet(); if(!(a.cloud||force)||!a.key) return null; const q=aiQuota(); if(!force&&q.n>=AI_DAILY) return null;
+  try{ const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":a.key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:AI_MODEL,max_tokens:5,messages:[{role:"user",content:aiPrompt(text)}]})});
+    q.n++; try{ localStorage.setItem("bujjet.aiCount",JSON.stringify(q)); }catch(e){}
+    const j=await r.json(); if(!r.ok) throw new Error((j.error&&j.error.message)||("HTTP "+r.status)); return aiYesNo(((j.content||[])[0]||{}).text); }catch(e){ window._aiErr=String(e.message||e); return null; } }
+// Decide whether a parsed notification goes to To review. Never saves anything by itself.
+async function screenReading(m,text){ if(m.clear) return {keep:true,by:"rules"};
+  if(window.__aiMock){ const v=window.__aiMock(text); if(v!=null){ if(v) m.ai="test"; else return {keep:false,by:"test"}; return {keep:true,by:"test"}; } }
+  let v=await askNano(text), by="Gemini Nano"; if(v==null){ v=await askClaude(text); by="Claude"; }
+  if(v===false) return {keep:false,by}; if(v===true){ m.ai=by; return {keep:true,by}; }
+  m.unsure=true; return {keep:true,by:"rules"}; }
+function renderAICard(){ const box=$("aiBody"); if(!box) return; box.textContent=""; const a=aiGet();
+  if(!NATIVE){ box.innerHTML='<div class="small muted">AI checks run in the bujjet Android app, where transactions are detected from notifications.</div>'; return; }
+  const p=document.createElement("div"); p.className="small muted"; p.textContent="bujjet's rules handle clear messages. Only notifications it isn't sure about get an AI check, and nothing is saved without your review."; box.appendChild(p);
+  const ns=document.createElement("div"); ns.className="small"; ns.id="nanoLine"; ns.textContent="On this phone (Gemini Nano): checking…"; box.appendChild(ns);
+  const dl=document.createElement("button"); dl.type="button"; dl.className="secondary"; dl.hidden=true; dl.textContent="Download Gemini Nano"; box.appendChild(dl);
+  dl.onclick=async()=>{ try{ await NANO.download(); toast("Downloading Gemini Nano"); }catch(e){ toast("Couldn't start the download"); } setTimeout(renderAICard,1500); };
+  nanoStatus().then(st=>{ ns.textContent="On this phone (Gemini Nano): "+({available:"available, used first. Nothing leaves your phone.",downloadable:"supported, not downloaded yet.",downloading:"downloading…",unavailable:"not supported on this phone.",none:"not available.",error:"couldn't check."}[st]||st); dl.hidden=st!=="downloadable"; });
+  const cl=document.createElement("label"); cl.className="fxrow small"; cl.innerHTML='<span>Use Claude when bujjet isn\'t sure<br><span class="muted">Sends only that notification\'s text to Anthropic (Claude Haiku), up to '+AI_DAILY+' a day. Your balances and history are never sent. Your API key stays on this phone.</span></span><input type="checkbox">';
+  const cb=cl.querySelector("input"); cb.checked=!!a.cloud; box.appendChild(cl);
+  const kl=document.createElement("label"); kl.className="f"; kl.innerHTML='<span class="small muted">Anthropic API key</span><input type="password" autocomplete="off" placeholder="sk-ant-…">'; const ki=kl.querySelector("input"); ki.value=a.key||""; box.appendChild(kl);
+  const tb=document.createElement("button"); tb.type="button"; tb.className="secondary"; tb.textContent="Test Claude"; box.appendChild(tb);
+  const st=document.createElement("div"); st.className="small muted"; st.id="aiStatus"; const q=aiQuota(); st.textContent=a.cloud?(a.key?`On. ${q.n} of ${AI_DAILY} checks used today.`:"Add your API key to turn it on."):""; box.appendChild(st);
+  cb.onchange=()=>{ aiSet({...aiGet(),cloud:cb.checked}); renderAICard(); };
+  ki.onchange=()=>{ aiSet({...aiGet(),key:ki.value.trim()}); renderAICard(); };
+  tb.onclick=async()=>{ aiSet({...aiGet(),key:ki.value.trim()}); st.textContent="Testing…"; window._aiErr="";
+    const v=await askClaude("Maya: Get up to ₱50,000 with Maya Easy Credit. Apply now!",true);
+    st.textContent=v===false?"Claude works: it correctly said a loan offer isn't a transaction.":v===true?"Claude answered, but got the test wrong. Tell Claude in chat.":"Couldn't reach Claude"+(window._aiErr?": "+window._aiErr:"")+"."; };
+}
 /*PARSER-START*/
 /* ---------- message + receipt reading (all on this phone) ---------- */
 const PH_SOURCES=[["GCash",/g-?cash/i],["Maya",/\bmaya\b|paymaya/i],["BPI",/\bbpi\b/i],["BDO",/\bbdo\b/i],["Metrobank",/metro ?bank|\bmcc\b/i],["UnionBank",/union ?bank/i],["Maribank",/mari ?bank|maricard/i],["SeaBank",/sea ?bank/i],
@@ -1425,6 +1466,8 @@ function guessAcct(t,accts,opts){ opts=opts||{}; const src=PH_SOURCES.find(([,re
   const pick=opts.viaCard?hits.find(isCard):hits.find(a=>!isCard(a)); return (pick||hits[0]).id; }
 function cleanName(s){return String(s||"").replace(/\s+/g," ").replace(/^[\s:,-]+|[\s.,:;-]+$/g,"").slice(0,40)}
 // Read a bank / e-wallet message. Returns null if no amount found.
+const TX_CLEAR=/\b(you('ve| have)?( successfully)? (sent|paid|received|transferred|withdrawn|cashed[- ]in)|you (sent|paid|received)|(was|is|has been) (completed|successful|charged|debited|credited|used|received|sent|paid)|successful(ly)? (payment|transfer|purchase|cash[- ]?in|withdrawal)|transaction (of|amount)|debit (card )?transaction|amount withdrawn|amounting to|(received|sent|paid|payment of|transferred) (php|₱|p) ?\d|ref(erence)?\.? ?(no\.?|number|#)\s*:?\s*[a-z0-9]{6,})/;
+const TX_OFFER=/\b(up to|borrow|loans? offer|apply( now| today)?|pre-?approved|eligible|qualif(y|ied)|limit increase|cash loan|easy credit|instant cash|limited[- ]time|claim (it|now|yours)|unlock|exclusive|invit(e|ed|ation)|you (could|can) (get|borrow|enjoy)|get (php|₱|p) ?\d)\b/;
 function parseMessage(raw,opts){opts=opts||{}; const hint=opts.hint||""; const text=String(raw||"").replace(/ /g," ").trim(); if(!text) return null;
   // drop balance / limit figures so they aren't mistaken for the amount
   const t=text.replace(/(?:avail(?:able)?\.?|remaining|new|current|running|outstanding|ending|wallet)?\s*(?:bal(?:ance)?\.?|credit limit|limit)\s*(?:is|of|:)?\s*(?:PHP|Php|₱|P)\s?[\d,]+(?:\.\d{1,2})?/gi," ");
@@ -1438,6 +1481,9 @@ function parseMessage(raw,opts){opts=opts||{}; const hint=opts.hint||""; const t
   if(!(out||inc)) return null;
   if(/\b(otp|one[- ]time[- ]?(pin|password)|authentication code|verification code|do not share this)\b/.test(low)) return null;
   if(promo&&!/\b(you('ve| have)?( successfully)? (sent|paid|received|transferred)|was (completed|successful|charged)|has been (completed|credited|debited)|your payment|amount withdrawn)\b/.test(low)) return null;
+  // Clear signs money actually moved, vs. loan/credit offers ("Get up to ₱50,000", "pre-approved", "apply now")
+  const clear=TX_CLEAR.test(low);
+  if(TX_OFFER.test(low)&&!clear) return null;
   const type=inc&&!/\b(you('ve| have)? (sent|paid)|purchase|debited|spent|charged)\b/.test(low)?"income":"expense";
   const amount=amts[0].v;
   let who=null, m=t.match(/\b(?:at|to|from|for|merchant:?|paid to|sent to|received from)\s+([A-Za-z0-9][A-Za-z0-9&'.\/\-* ]{1,40}?)(?=\s+(?:on|for|with|using|via|thru|through|ref|amount|amounting|worth|has|was|is|at|from|if)\b|\s*[.,;:(](?=\s|$)|\s*$)/);
@@ -1446,7 +1492,7 @@ function parseMessage(raw,opts){opts=opts||{}; const hint=opts.hint||""; const t
   const srcText=(who?text.replace(who,""):text)+" "+hint; let src=PH_SOURCES.find(([,re])=>re.test(srcText)); if(!src&&/^UB\d/i.test(ref)) src=["UnionBank"];
   const last4=(t.match(/(?:card(?: no\.?| number| ending(?: in)?)?\s*|\*{3,}|x{3,})(\d{4})\b/i)||[])[1]||"";
   const viaCard=/credit card|\bmcc\b|card \d{4} was used|was charged to your card/i.test(t);
-  return {type,amount,who,source:src?src[0]:"",ref,last4,viaCard,date:findDate(text)||null,text:text.slice(0,400),sure:out||inc};
+  return {type,amount,who,source:src?src[0]:"",ref,last4,viaCard,date:findDate(text)||null,text:text.slice(0,400),sure:out||inc,clear};
 }
 // Read a receipt's text (from the camera). Finds the total, the store and the date.
 function parseReceipt(raw){const lines=String(raw||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean); if(!lines.length) return null;
@@ -1527,7 +1573,7 @@ function renderInbox(){ const card=$("inboxCard"); if(!card) return; const L=INB
   L.forEach(it=>{ const d=document.createElement("div"); d.className="ibx";
     d.innerHTML=`<div><strong></strong><div class="small muted"></div></div><div class="amt"></div><div class="acts"><button class="primary" type="button">Review and save</button><button class="ghost" type="button">Dismiss</button></div>`;
     d.querySelector("strong").textContent=(it.type==="income"?"Money in":"Spent")+(cleanWho(it)?" · "+cleanWho(it):"");
-    d.querySelector(".small").textContent=[it.source||(it.receipt?"Receipt":"Shared"),it.date?dName(new Date(it.date+"T00:00")):"date not found"].join(" · ");
+    d.querySelector(".small").textContent=[it.source||(it.receipt?"Receipt":"Shared"),it.date?dName(new Date(it.date+"T00:00")):"date not found",...(it.unsure?["not sure this is a real transaction"]:[])].join(" · ");
     d.querySelector(".amt").textContent=(it.type==="income"?"+":"")+peso2(it.amount);
     const [ok,no]=d.querySelectorAll(".acts button");
     ok.onclick=()=>{ const p=readingToPre(it,{kind:"inbox",inboxId:it.id}); openSheet(p); $("quick").hidden=true; $("readNote").hidden=false; $("readNote").textContent="From what you shared"+(it.source?" ("+it.source+")":"")+". Check it, then save."; };
@@ -1577,8 +1623,9 @@ async function pullCaptured(){ if(!NR||!store||!store.config) return; let r; try
   for(const it of items){ const title=String(it.title||""), body=String(it.text||"");
     if(it.pkg==="bujjet.selection"){ try{ localStorage.setItem("bujjet.clipSeen",hashStr(body)); }catch(e){} $("clipCard").hidden=true; const m=parseMessage(body)||parseReceipt(body); closeAllForPick(); openSheet(); fillFromReading(m,"paste"); if(m) $("readNote").textContent="Read from the text you selected"+(m.source?" ("+m.source+")":"")+". Check it, then save."; continue; }
     if(SMS_APP.test(it.pkg||"")&&!PH_SOURCES.some(([,re])=>re.test(title))&&!/^[A-Z0-9]{2,12}$/.test(title)){ logIt(it,"Skipped: text from a person"); continue; } // SMS only from bank-style senders, not people
-    const m=parseMessage(title+". "+body,{hint:(it.app||"")+" "+title}); if(!m){ logIt(it,"Not a transaction (promo, OTP or no amount)"); continue; }
-    logIt(it,"Found "+(m.type==="income"?"+":"")+peso2(m.amount));
+    const m=parseMessage(title+". "+body,{hint:(it.app||"")+" "+title}); if(!m){ logIt(it,"Not a transaction (promo, offer, OTP or no amount)"); continue; }
+    const v=await screenReading(m,title+". "+body); if(!v.keep){ logIt(it,"Not a transaction ("+v.by+" checked)"); continue; }
+    logIt(it,"Found "+(m.type==="income"?"+":"")+peso2(m.amount)+(v.by!=="rules"?" ("+v.by+" checked)":""));
     if(!m.date&&it.time) m.date=ymd(new Date(Number(it.time))); m.via=it.app||""; found.push(m); }
   if(log.length){ try{ const old=JSON.parse(localStorage.getItem("bujjet.capLog")||"[]"); localStorage.setItem("bujjet.capLog",JSON.stringify([...log.reverse(),...old].slice(0,25))); }catch(e){} }
   if(!found.length){ renderInbox(); return; } const n=await addToInbox(found); if(n) toast(`${n} new transaction${n>1?"s":""} to review`); }
@@ -2159,7 +2206,7 @@ if("serviceWorker" in navigator&&!NATIVE){navigator.serviceWorker.register("sw.j
   if(typeof load==="function"){ const _load=load; load=async function(...a){ const p=pill(); if(p&&/Loading/.test(p.textContent)) p.classList.add("saving"); try{ return await _load.apply(this,a);} finally{ const q=pill(); if(q&&!pend) q.classList.remove("saving"); } }; }
   // settings switch
   { const v=$("appVer"); if(v) v.textContent="Version "+APP_VERSION+(NATIVE?" · Android app":" · web"); }
-  renderReminders(); if(LN){ try{ LN.addListener("localNotificationActionPerformed",a=>{ const go=a&&a.notification&&a.notification.extra&&a.notification.extra.go;
+  renderReminders(); renderAICard(); if(LN){ try{ LN.addListener("localNotificationActionPerformed",a=>{ const go=a&&a.notification&&a.notification.extra&&a.notification.extra.go;
       setTimeout(()=>{ if(go==="log") openSheet(); else if(go==="paydays"){ const b=document.querySelector('nav .tab[data-v="paydays"]'); b&&b.click(); } },400); }); }catch(e){} }
   const t=$("fxToggle"); if(t){ t.checked=fxOn; t.onchange=()=>{ fxOn=t.checked; try{localStorage.setItem("bujjet.fx",fxOn?"on":"off")}catch(e){} if(fxOn){sOk();buzz(12)} toast(fxOn?"Sounds and vibration on":"Sounds and vibration off"); }; }
 })();

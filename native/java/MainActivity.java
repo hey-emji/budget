@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NotifReaderPlugin.class);
         registerPlugin(GoogleAuthPlugin.class);
+        registerPlugin(NanoPlugin.class);
         super.onCreate(savedInstanceState);
         // Back button / swipe back: let the app close its own panels first, and only leave after a second back.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
